@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from typing import Callable
 
 from homeassistant.components import assist_pipeline
@@ -199,7 +200,7 @@ def play_media(hass: HomeAssistant, entity_id: str, media_id: str, media_type: s
 
 import asyncio
 from homeassistant.core import HomeAssistant, Context
-from homeassistant.helpers.typing import Callable
+from typing import Callable
 
 def run_forever(
     hass: HomeAssistant,
