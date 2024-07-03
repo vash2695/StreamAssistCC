@@ -26,7 +26,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType):
                 hass, call.data, context=call.context, stt_stream=stt_stream
             )
         except Exception as e:
-            _LOGGER.error("stream_assistcc.run", exc_info=e)
+            _LOGGER.error("stream_assist_cc.run", exc_info=e)
             return {"error": {"type": str(type(e)), "message": str(e)}}
         finally:
             stt_stream.close()
