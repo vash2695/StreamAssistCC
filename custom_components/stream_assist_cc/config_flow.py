@@ -78,6 +78,7 @@ class OptionsFlowHandler(OptionsFlow):
                     vol.Exclusive("camera_entity_id", "url"): vol.In(cameras),
                     vol.Optional("player_entity_id"): cv.multi_select(players),
                     vol.Optional("stt_start_media"): str,
+                    vol.Optional("stt_end_media"): str,
                     vol.Optional("pipeline_id"): vol.In(pipelines),
                 },
                 defaults,
