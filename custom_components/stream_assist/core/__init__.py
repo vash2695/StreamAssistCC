@@ -79,6 +79,7 @@ async def assist_run(
     context: Context = None,
     event_callback: PipelineEventCallback = None,
     stt_stream: Stream = None,
+    conversation_id: str | None = None #continued_conversation
 ) -> dict:
     # 1. Process assist_pipeline settings
     assist = data.get("assist", {})
@@ -160,8 +161,8 @@ async def assist_run(
         stt_stream=stt_stream,
         intent_input=assist.get("intent_input"),
         tts_input=assist.get("tts_input"),
-        conversation_id=assist.get("conversation_id"),
-        device_id=assist.get("device_id"),
+        conversation_id=conversation_id,  # Pass the conversation_id
+        device_id=data.get("device_id"),  # Pass the device_id if available
     )
 
     try:
@@ -213,17 +214,27 @@ def run_forever(
             await asyncio.sleep(30)
 
     async def run_assist():
-        while not stt_stream.closed:
+        conversation_id = None
+        last_interaction_time = None
+       while not stt_stream.closed:
             try:
-                await assist_run(
+                current_time = time.time()
+                # Check if the conversation has timed out (e.g., after 5 minutes of inactivity)
+                if last_interaction_time and current_time - last_interaction_time > 300:
+                    conversation_id = None
+
+                result = await assist_run(
                     hass,
                     data,
                     context=context,
-                    event_callback=event_callback,
-                    stt_stream=stt_stream,
+                   event_callback=event_callback,
+                   stt_stream=stt_stream,
+                    conversation_id=conversation_id
                 )
-            except Exception as e:
-                _LOGGER.debug(f"run_assist error {type(e)}: {e}")
+                conversation_id = result.get("conversation_id")
+               last_interaction_time = current_time
+           except Exception as e:
+               _LOGGER.debug(f"run_assist error {type(e)}: {e}")
 
     hass.async_create_background_task(run_stream(), "stream_assist_run_stream")
     hass.async_create_background_task(run_assist(), "stream_assist_run_assist")
