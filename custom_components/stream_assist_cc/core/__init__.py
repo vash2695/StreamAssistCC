@@ -82,6 +82,7 @@ async def assist_run(
     stt_stream: Stream = None,
     conversation_id: str | None = None #continued_conversation
 ) -> dict:
+    _LOGGER.debug(f"assist_run called with conversation_id: {conversation_id}")
     # 1. Process assist_pipeline settings
     assist = data.get("assist", {})
 
@@ -117,7 +118,7 @@ async def assist_run(
     events = {}
 
     def internal_event_callback(event: PipelineEvent):
-        _LOGGER.debug(f"event: {event}")
+        _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
 
         events[event.type] = (
             {"data": event.data, "timestamp": event.timestamp}
@@ -177,13 +178,22 @@ async def assist_run(
         # 6. Run Pipeline
         await pipeline_input.execute()
 
+        # Extract conversation_id from the INTENT_END event
+        result_conversation_id = None
+        if PipelineEventType.INTENT_END in events:
+            intent_output = events[PipelineEventType.INTENT_END].get('data', {}).get('intent_output', {})
+            result_conversation_id = intent_output.get('conversation_id')
+
+        return {"events": events, "conversation_id": result_conversation_id}
+
     except AttributeError:
         pass  # 'PipelineRun' object has no attribute 'stt_provider'
     finally:
         if stt_stream:
             stt_stream.stop()
 
-    return events
+    # If we reach here due to an exception, return a default dictionary
+    return {"events": events, "conversation_id": None}
 
 
 def play_media(hass: HomeAssistant, entity_id: str, media_id: str, media_type: str):
@@ -230,10 +240,13 @@ def run_forever(
                     stt_stream=stt_stream,
                     conversation_id=conversation_id
                 )
-                conversation_id = result.get("conversation_id")
-                last_interaction_time = current_time
+                new_conversation_id = result.get("conversation_id")
+                if new_conversation_id:
+                    conversation_id = new_conversation_id
+                    last_interaction_time = current_time
+                _LOGGER.debug(f"Conversation ID: {conversation_id}")
             except Exception as e:
-                _LOGGER.debug(f"run_assist error {type(e)}: {e}")
+                _LOGGER.exception(f"run_assist error: {e}")
 
     # Create coroutines
     run_stream_coro = run_stream()
