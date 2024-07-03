@@ -129,6 +129,9 @@ async def assist_run(
         if event.type == PipelineEventType.STT_START:
             if player_entity_id and (media_id := data.get("stt_start_media")):
                 play_media(hass, player_entity_id, media_id, "audio")
+        elif event.type == PipelineEventType.STT_END:
+            if player_entity_id and (media_id := data.get("stt_end_media")):
+                play_media(hass, player_entity_id, media_id, "audio")
         elif event.type == PipelineEventType.TTS_END:
             if player_entity_id:
                 tts = event.data["tts_output"]
