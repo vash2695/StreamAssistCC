@@ -26,12 +26,12 @@ async def async_setup_entry(
             break
         if event == "tts" and not pipeline.tts_engine:
             continue
-        entities.append(StreamAssistSensor(config_entry, event))
+        entities.append(StreamAssistCCSensor(config_entry, event))
 
     async_add_entities(entities)
 
 
-class StreamAssistSensor(SensorEntity):
+class StreamAssistCCSensor(SensorEntity):
     _attr_native_value = STATE_IDLE
 
     def __init__(self, config_entry: ConfigEntry, key: str):
