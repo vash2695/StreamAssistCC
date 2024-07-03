@@ -27,7 +27,7 @@ from .stream import Stream
 
 _LOGGER = logging.getLogger(__name__)
 
-DOMAIN = "stream_assist"
+DOMAIN = "stream_assistcc"
 EVENTS = ["wake", "stt", "intent", "tts"]
 
 
