@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from typing import Callable
 
 from homeassistant.components import assist_pipeline
 from homeassistant.components import media_player
@@ -22,6 +21,7 @@ from homeassistant.core import HomeAssistant, Context
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import Entity, DeviceInfo
 from homeassistant.helpers.entity_component import EntityComponent
+from homeassistant.helpers.typing import Callable
 
 from .stream import Stream
 
