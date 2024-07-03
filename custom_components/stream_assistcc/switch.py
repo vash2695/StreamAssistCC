@@ -18,10 +18,10 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    async_add_entities([StreamAssistSwitch(config_entry)])
+    async_add_entities([StreamAssistCCSwitch(config_entry)])
 
 
-class StreamAssistSwitch(SwitchEntity):
+class StreamAssistCCSwitch(SwitchEntity):
     on_close: Callable = None
 
     def __init__(self, config_entry: ConfigEntry):
