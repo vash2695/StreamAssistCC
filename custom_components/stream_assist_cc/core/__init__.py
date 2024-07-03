@@ -197,11 +197,6 @@ def play_media(hass: HomeAssistant, entity_id: str, media_id: str, media_type: s
     coro = hass.services.async_call("media_player", "play_media", service_data)
     hass.async_create_background_task(coro, "stream_assist_cc_play_media")
 
-
-import asyncio
-from homeassistant.core import HomeAssistant, Context
-from typing import Callable
-
 def run_forever(
     hass: HomeAssistant,
     data: dict,
