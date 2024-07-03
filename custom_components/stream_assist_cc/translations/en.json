@@ -20,7 +20,8 @@
           "stream_source": "Stream URL (RTSP/RTMP/HTTP)",
           "camera_entity_id": "Camera Entity",
           "player_entity_id": "Player Entity",
-          "stt_start_media": "STT start media",
+          "stt_start_media": "STT Start Media",
+          "stt_end_media": "STT End Media",
           "pipeline_id": "Pipeline (Settings > Voice Assistant)"
         }
       }
