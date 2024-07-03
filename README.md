@@ -1,6 +1,6 @@
-# Stream AssistCC
+# Stream Assist CC
 
-This fork is an attempt at implementing continued conversation within StreamAssist
+This fork is an attempt at implementing continued conversation within Stream Assist.
 
 [Home Assistant](https://www.home-assistant.io/) custom component that allows you to turn almost [any camera](https://www.home-assistant.io/integrations/#camera) and almost [any speaker](https://www.home-assistant.io/integrations/#media-player) into a local [voice assistant](https://www.home-assistant.io/integrations/#voice).
 
