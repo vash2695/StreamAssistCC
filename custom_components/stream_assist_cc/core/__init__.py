@@ -197,6 +197,10 @@ def play_media(hass: HomeAssistant, entity_id: str, media_id: str, media_type: s
     hass.async_create_background_task(coro, "stream_assist_cc_play_media")
 
 
+import asyncio
+from homeassistant.core import HomeAssistant, Context
+from homeassistant.helpers.typing import Callable
+
 def run_forever(
     hass: HomeAssistant,
     data: dict,
@@ -216,10 +220,9 @@ def run_forever(
     async def run_assist():
         conversation_id = None
         last_interaction_time = None
-       while not stt_stream.closed:
+        while not stt_stream.closed:
             try:
                 current_time = time.time()
-                # Check if the conversation has timed out (e.g., after 5 minutes of inactivity)
                 if last_interaction_time and current_time - last_interaction_time > 300:
                     conversation_id = None
 
@@ -227,20 +230,24 @@ def run_forever(
                     hass,
                     data,
                     context=context,
-                   event_callback=event_callback,
-                   stt_stream=stt_stream,
+                    event_callback=event_callback,
+                    stt_stream=stt_stream,
                     conversation_id=conversation_id
                 )
                 conversation_id = result.get("conversation_id")
-               last_interaction_time = current_time
-           except Exception as e:
-               _LOGGER.debug(f"run_assist error {type(e)}: {e}")
+                last_interaction_time = current_time
+            except Exception as e:
+                _LOGGER.debug(f"run_assist error {type(e)}: {e}")
 
-    hass.async_create_background_task(run_stream(), "stream_assist_cc_run_stream")
-    hass.async_create_background_task(run_assist(), "stream_assist_cc_run_assist")
+    # Create coroutines
+    run_stream_coro = run_stream()
+    run_assist_coro = run_assist()
+
+    # Schedule the coroutines as background tasks
+    hass.loop.create_task(run_stream_coro, name="stream_assist_cc_run_stream")
+    hass.loop.create_task(run_assist_coro, name="stream_assist_cc_run_assist")
 
     return stt_stream.close
-
 
 def new(cls, kwargs: dict):
     if not kwargs:
