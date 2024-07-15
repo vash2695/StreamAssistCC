@@ -8,8 +8,12 @@
           "name": "Name",
           "stream_source": "Stream URL (RTSP/RTMP/HTTP)",
           "camera_entity_id": "Camera Entity"
+          "player_entity_id": "Player Entity",
+          "stt_start_media": "STT Start Media",
+          "stt_end_media": "STT End Media",
+          "pipeline_id": "Voice Assistant Pipeline"
         },
-        "description": "Select camera `entity_id` or stream `source`"
+        "description": "Enter the URL for your audio stream or select a camera entity"
       }
     }
   },
@@ -22,7 +26,7 @@
           "player_entity_id": "Player Entity",
           "stt_start_media": "STT Start Media",
           "stt_end_media": "STT End Media",
-          "pipeline_id": "Pipeline (Settings > Voice Assistant)"
+          "pipeline_id": "Voice Assistant Pipeline"
         }
       }
     }
