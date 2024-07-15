@@ -23,7 +23,19 @@ class ConfigFlowHandler(ConfigFlow, domain=DOMAIN):
             if v.domain == "camera"
             and v.supported_features & CameraEntityFeature.STREAM
         ]
+        players = [
+            k
+            for k, v in reg.entities.items()
+            if v.domain == "media_player"
+            and v.supported_features & MediaPlayerEntityFeature.PLAY_MEDIA
+        ]
 
+        pipelines = {
+            p.id: p.name for p in assist_pipeline.async_get_pipelines(self.hass)
+        }
+
+        defaults = self.config_entry.options.copy()
+        
         return self.async_show_form(
             step_id="user",
             data_schema=vol_schema(
