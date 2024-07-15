@@ -15,4 +15,6 @@ Future goals:
    * Current roadblock is finding a way to make the integration aware of exactly when TTS playback has ended for the most recent interaction. Without this, the STT phase would initiate before TTS playback ends, so the user would not have the opportunity to make a request in time.
 * Globally continued conversations: Add the option to pass conversation IDs across all integration entries
    * This would require the integration to also provide updated area and device information
-* 
+* Expose more of the integration to automations
+  * Example: A service call that allows you to select an integration entry and trigger the assistant pipeline at the intent phase with predefined data
+
