@@ -1,5 +1,7 @@
 # Stream Assist CC
 
+# NOTE: I make changes to this frequently that may break things! Use at your own risk.
+
 This fork is an attempt at implementing continued conversation and other features within Stream Assist.
 
 Features added so far:
