@@ -8,6 +8,8 @@ Features added so far:
 * Continued conversation: conversation_id is preserved between interactions for a given entry with a timeout of 300 seconds, additional testing needed to verify timeout reliability
 * STT End media: Now both the start and end of the STT phase have options for audio feedback. Also added a field for this in the config options
 * Audio feedback for "no-text-recognized" events
+* Added cancel phrases: "stop", "nevermind", "never mind", "thank you", "cancel that", "cancel",
+    "abort", "quit", "exit", "end", "forget it", "that's all", "that is all"
 * More initial config options: All available options are now in the initial config screen
 
 Future goals:
