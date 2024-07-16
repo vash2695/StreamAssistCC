@@ -119,8 +119,10 @@ async def assist_run(
 
     # 2. Setup Pipeline Run
     events = {}
+    pipeline_run = None  # Define pipeline_run before the internal_event_callback
 
     def internal_event_callback(event: PipelineEvent):
+        nonlocal pipeline_run  # Make pipeline_run accessible inside this function
         _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
 
         events[event.type] = (
@@ -133,7 +135,15 @@ async def assist_run(
             if player_entity_id and (media_id := data.get("stt_start_media")):
                 play_media(hass, player_entity_id, media_id, "music")
         elif event.type == PipelineEventType.STT_END:
-            if player_entity_id and (media_id := data.get("stt_end_media")):
+            stt_text = event.data.get("stt_output", {}).get("text", "").lower()
+            
+            if any(phrase in stt_text for phrase in CANCELLATION_PHRASES):
+                _LOGGER.info(f"Cancellation phrase detected: {stt_text}")
+                if player_entity_id and (media_id := data.get("cancellation_media")):
+                    play_media(hass, player_entity_id, media_id, "music")
+                # Cancel the pipeline
+                pipeline_run.stop(PipelineStage.STT)
+            elif player_entity_id and (media_id := data.get("stt_end_media")):
                 play_media(hass, player_entity_id, media_id, "music")
         elif event.type == PipelineEventType.ERROR:
             if event.data.get("code") == "stt-no-text-recognized":
