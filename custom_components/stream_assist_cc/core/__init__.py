@@ -1,5 +1,4 @@
 import asyncio
-from mutagen.mp3 import MP3
 import aiohttp
 import os
 import tempfile
@@ -7,6 +6,7 @@ import logging
 import time
 import re
 from typing import Callable
+from mutagen.mp3 import MP3
 
 from homeassistant.components import assist_pipeline
 from homeassistant.components import media_player
