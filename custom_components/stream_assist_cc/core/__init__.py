@@ -27,6 +27,7 @@ from homeassistant.components.assist_pipeline import (
 )
 from homeassistant.components.camera import Camera
 from homeassistant.components.http.view import request_handler_factory
+from homeassistant.components.http import HomeAssistantView
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, Context
 from homeassistant.helpers.device_registry import DeviceEntryType
@@ -201,7 +202,8 @@ async def assist_run(
                 # Start playing media immediately
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
                 # Calculate duration
-                await calculate_tts_duration(tts_url)
+                tts_duration = await get_tts_duration(hass, tts_url)
+                _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
     
         if event_callback:
             if inspect.iscoroutinefunction(event_callback):
