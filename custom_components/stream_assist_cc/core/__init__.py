@@ -97,13 +97,13 @@ async def get_tts_duration(hass: HomeAssistant, tts_url: str) -> float:
             full_url = tts_url
 
         # Use Home Assistant's HTTP client to get the file
-        client = request_handler_factory(hass.http.app, hass).get_client_session()
-        async with client.get(full_url) as response:
-            if response.status != 200:
-                _LOGGER.error(f"Failed to fetch TTS audio: HTTP {response.status}")
-                return 0
-            
-            content = await response.read()
+        async with hass.http.async_get_client_session() as session:
+            async with session.get(full_url) as response:
+                if response.status != 200:
+                    _LOGGER.error(f"Failed to fetch TTS audio: HTTP {response.status}")
+                    return 0
+                
+                content = await response.read()
 
         # Use mutagen to get the duration
         audio = MP3(io.BytesIO(content))
