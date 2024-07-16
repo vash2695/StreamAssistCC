@@ -268,77 +268,117 @@ def run_forever(
             await asyncio.sleep(30)
 
     async def run_assist():
-        conversation_id = None
-        last_interaction_time = None
-        conversation_active = False
-        tts_end_event = asyncio.Event()
-        tts_playback_task = None
+    conversation_id = None
+    last_interaction_time = None
+    conversation_active = False
+    tts_end_event = asyncio.Event()
+    tts_playback_task = None
 
-        async def internal_event_callback(event: PipelineEvent):
-            nonlocal conversation_active, tts_end_event, tts_playback_task
-            if event.type == PipelineEventType.WAKE_WORD_END:
-                conversation_active = True
-            elif event.type == PipelineEventType.TTS_END:
-                tts_output = event.data.get('tts_output', {})
-                audio_url = tts_output.get('url')
-                if audio_url:
-                    audio_length = await get_audio_length(audio_url)
-                    _LOGGER.debug(f"TTS audio length: {audio_length} seconds")
-                    if tts_playback_task:
-                        tts_playback_task.cancel()
-                    tts_playback_task = asyncio.create_task(schedule_next_listen(audio_length))
-                else:
-                    tts_end_event.set()
-            
-            if event_callback:
-                await event_callback(event)
-
-        async def schedule_next_listen(delay: float):
-            await asyncio.sleep(delay)
-            tts_end_event.set()
-
-        while not stt_stream.closed:
-            try:
-                current_time = time.time()
-                if last_interaction_time and current_time - last_interaction_time > 300:
-                    conversation_id = None
-                    conversation_active = False
-
-                if not conversation_active:
-                    # Wait for wake word detection
-                    await asyncio.sleep(0.1)
-                    continue
-
-                tts_end_event.clear()
-                result = await assist_run(
-                    hass,
-                    data,
-                    context=context,
-                    event_callback=internal_event_callback,
-                    stt_stream=stt_stream,
-                    conversation_id=conversation_id
-                )
-                new_conversation_id = result.get("conversation_id")
-                if new_conversation_id:
-                    conversation_id = new_conversation_id
-                    last_interaction_time = current_time
-
-                _LOGGER.debug(f"Conversation ID: {conversation_id}")
-
-                # Wait for TTS to end before starting the next listening phase
-                await tts_end_event.wait()
-
-                # Check if the conversation was cancelled or ended
-                if PipelineEventType.RUN_END in result["events"]:
-                    run_end_data = result["events"][PipelineEventType.RUN_END].get("data", {})
-                    if run_end_data.get("error") or "stt-no-text-recognized" in str(run_end_data):
-                        conversation_active = False
-
-            except Exception as e:
-                _LOGGER.exception(f"run_assist error: {e}")
-                conversation_active = False
+    async def internal_event_callback(event: PipelineEvent):
+        nonlocal conversation_active, tts_end_event, tts_playback_task
+        _LOGGER.debug(f"Pipeline event: {event.type}")
+        
+        if event.type == PipelineEventType.WAKE_WORD_END:
+            _LOGGER.info("Wake word detected")
+            conversation_active = True
+        elif event.type == PipelineEventType.TTS_END:
+            tts_output = event.data.get('tts_output', {})
+            audio_url = tts_output.get('url')
+            if audio_url:
+                audio_length = await get_audio_length(audio_url)
+                _LOGGER.debug(f"TTS audio length: {audio_length} seconds")
                 if tts_playback_task:
                     tts_playback_task.cancel()
+                tts_playback_task = asyncio.create_task(schedule_next_listen(audio_length))
+            else:
+                tts_end_event.set()
+        
+        if event_callback:
+            await event_callback(event)
+
+    async def schedule_next_listen(delay: float):
+        await asyncio.sleep(delay)
+        tts_end_event.set()
+
+    while not stt_stream.closed:
+        try:
+            current_time = time.time()
+            if last_interaction_time and current_time - last_interaction_time > 300:
+                conversation_id = None
+                conversation_active = False
+
+            # Always start with wake word detection
+            _LOGGER.debug("Waiting for wake word...")
+            pipeline_run = PipelineRun(
+                hass,
+                context=context,
+                pipeline=pipeline,
+                start_stage=PipelineStage.WAKE_WORD,
+                end_stage=PipelineStage.WAKE_WORD,
+                event_callback=internal_event_callback,
+            )
+            
+            pipeline_input = PipelineInput(
+                run=pipeline_run,
+                stt_stream=stt_stream,
+            )
+            
+            await pipeline_input.validate()
+            await pipeline_input.execute()
+
+            if not conversation_active:
+                continue  # If wake word wasn't detected, continue waiting
+
+            _LOGGER.debug("Wake word detected, starting conversation")
+            tts_end_event.clear()
+            pipeline_run = PipelineRun(
+                hass,
+                context=context,
+                pipeline=pipeline,
+                start_stage=PipelineStage.STT,
+                end_stage=PipelineStage.TTS,
+                event_callback=internal_event_callback,
+            )
+            
+            pipeline_input = PipelineInput(
+                run=pipeline_run,
+                stt_metadata=stt.SpeechMetadata(
+                    language="",
+                    format=stt.AudioFormats.WAV,
+                    codec=stt.AudioCodecs.PCM,
+                    bit_rate=stt.AudioBitRates.BITRATE_16,
+                    sample_rate=stt.AudioSampleRates.SAMPLERATE_16000,
+                    channel=stt.AudioChannels.CHANNEL_MONO,
+                ),
+                stt_stream=stt_stream,
+                conversation_id=conversation_id,
+                device_id=data.get("device_id"),
+            )
+
+            await pipeline_input.validate()
+            result = await pipeline_input.execute()
+
+            new_conversation_id = result.get("conversation_id")
+            if new_conversation_id:
+                conversation_id = new_conversation_id
+                last_interaction_time = current_time
+
+            _LOGGER.debug(f"Conversation ID: {conversation_id}")
+
+            # Wait for TTS to end before starting the next listening phase
+            await tts_end_event.wait()
+
+            # Check if the conversation was cancelled or ended
+            if PipelineEventType.RUN_END in result.get("events", {}):
+                run_end_data = result["events"][PipelineEventType.RUN_END].get("data", {})
+                if run_end_data.get("error") or "stt-no-text-recognized" in str(run_end_data):
+                    conversation_active = False
+
+        except Exception as e:
+            _LOGGER.exception(f"run_assist error: {e}")
+            conversation_active = False
+            if tts_playback_task:
+                tts_playback_task.cancel()
 
     # Create coroutines
     run_stream_coro = run_stream()
