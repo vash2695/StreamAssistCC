@@ -276,65 +276,71 @@ def run_forever(
 ) -> Callable:
     _LOGGER.debug("Entering run_forever function")
     stt_stream = Stream()
+    running = True
 
     async def run_stream():
         _LOGGER.debug("Entering run_stream coroutine")
-        while not stt_stream.closed:
+        while running and not stt_stream.closed:
             try:
                 _LOGGER.debug("Attempting to run stream")
                 await stream_run(hass, data, stt_stream=stt_stream)
                 _LOGGER.debug("Stream run completed")
             except Exception as e:
                 _LOGGER.error(f"run_stream error {type(e)}: {e}")
-            _LOGGER.debug("Waiting 30 seconds before next stream run")
-            await asyncio.sleep(30)
+            if running:
+                _LOGGER.debug("Waiting 30 seconds before next stream run")
+                await asyncio.sleep(30)
 
-async def run_assist():
-    _LOGGER.debug("Entering run_assist coroutine")
-    conversation_id = None
-    last_interaction_time = None
-    while not stt_stream.closed:
-        try:
-            _LOGGER.debug("Starting assist run")
-            current_time = time.time()
-            if last_interaction_time and current_time - last_interaction_time > 300:
-                _LOGGER.debug("Resetting conversation ID due to inactivity")
-                conversation_id = None
-
-            result = await assist_run(
-                hass,
-                data,
-                context=context,
-                event_callback=event_callback,
-                stt_stream=stt_stream,
-                conversation_id=conversation_id
-            )
-            _LOGGER.debug(f"Assist run completed. Result: {result}")
-            new_conversation_id = result.get("conversation_id")
-            tts_duration = result.get("tts_duration", 0)
-            
-            if new_conversation_id:
-                conversation_id = new_conversation_id
-                last_interaction_time = current_time
-            _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
-
-            # Wait for a short period after TTS playback before next run
-            await asyncio.sleep(max(1, tts_duration + 1))
-        except Exception as e:
-            _LOGGER.exception(f"run_assist error: {e}")
-            _LOGGER.debug("Waiting 1 second before next assist run")
-            await asyncio.sleep(1)
+    async def run_assist():
+        _LOGGER.debug("Entering run_assist coroutine")
+        conversation_id = None
+        last_interaction_time = None
+        while running and not stt_stream.closed:
+            try:
+                _LOGGER.debug("Starting assist run")
+                current_time = time.time()
+                if last_interaction_time and current_time - last_interaction_time > 300:
+                    _LOGGER.debug("Resetting conversation ID due to inactivity")
+                    conversation_id = None
+                result = await assist_run(
+                    hass,
+                    data,
+                    context=context,
+                    event_callback=event_callback,
+                    stt_stream=stt_stream,
+                    conversation_id=conversation_id
+                )
+                _LOGGER.debug(f"Assist run completed. Result: {result}")
+                new_conversation_id = result.get("conversation_id")
+                tts_duration = result.get("tts_duration", 0)
+                
+                if new_conversation_id:
+                    conversation_id = new_conversation_id
+                    last_interaction_time = current_time
+                _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
+                # Wait for a short period after TTS playback before next run
+                await asyncio.sleep(max(1, tts_duration + 1))
+            except Exception as e:
+                _LOGGER.exception(f"run_assist error: {e}")
+            if running:
+                _LOGGER.debug("Waiting 1 second before next assist run")
+                await asyncio.sleep(1)
 
     _LOGGER.debug("Creating coroutines")
-    run_stream_coro = run_stream()
-    run_assist_coro = run_assist()
+    run_stream_task = hass.loop.create_task(run_stream(), name="stream_assist_cc_run_stream")
+    run_assist_task = hass.loop.create_task(run_assist(), name="stream_assist_cc_run_assist")
 
-    _LOGGER.debug("Scheduling coroutines as background tasks")
-    hass.loop.create_task(run_stream_coro, name="stream_assist_cc_run_stream")
-    hass.loop.create_task(run_assist_coro, name="stream_assist_cc_run_assist")
+    def close():
+        nonlocal running
+        _LOGGER.debug("Closing stream_assist_cc tasks")
+        running = False
+        if not stt_stream.closed:
+            stt_stream.close()
+        run_stream_task.cancel()
+        run_assist_task.cancel()
 
     _LOGGER.debug("run_forever function completed, returning close function")
-    return stt_stream.close
+    return close
 
 def new(cls, kwargs: dict):
     if not kwargs:
