@@ -145,7 +145,7 @@ async def assist_run(
     pipeline_run = None  # Define pipeline_run before the internal_event_callback
     tts_duration = 0
 
-    def internal_event_callback(event: PipelineEvent):
+   async def internal_event_callback(event: PipelineEvent):
         nonlocal pipeline_run, tts_duration  # Make pipeline_run accessible inside this function
         _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
 
@@ -261,9 +261,8 @@ def play_media(hass: HomeAssistant, entity_id: str, media_id: str, media_type: s
         "media_content_type": media_type,
     }
 
-    # hass.services.call will block Hass
     coro = hass.services.async_call("media_player", "play_media", service_data)
-    hass.async_create_background_task(coro, "stream_assist_cc_play_media")
+    hass.async_create_task(coro, "stream_assist_cc_play_media")
 
 def run_forever(
     hass: HomeAssistant,
