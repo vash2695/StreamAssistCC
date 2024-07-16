@@ -1,4 +1,8 @@
 import asyncio
+from mutagen import MP3
+import aiohttp
+import os
+import tempfile
 import logging
 import time
 import re
@@ -78,7 +82,24 @@ async def stream_run(hass: HomeAssistant, data: dict, stt_stream: Stream) -> Non
 
     await hass.async_add_executor_job(stt_stream.run)
 
-
+async def get_audio_length(file_path: str) -> float:
+    if file_path.startswith(('http://', 'https://')):
+        async with aiohttp.ClientSession() as session:
+            async with session.get(file_path) as response:
+                if response.status == 200:
+                    with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as temp_file:
+                        temp_file.write(await response.read())
+                        temp_file_path = temp_file.name
+                    try:
+                        audio = MP3(temp_file_path)
+                        return audio.info.length
+                    finally:
+                        os.unlink(temp_file_path)
+    else:
+        audio = MP3(file_path)
+        return audio.info.length
+    return 0
+    
 async def assist_run(
     hass: HomeAssistant,
     data: dict,
@@ -249,17 +270,51 @@ def run_forever(
     async def run_assist():
         conversation_id = None
         last_interaction_time = None
+        conversation_active = False
+        tts_end_event = asyncio.Event()
+        tts_playback_task = None
+
+        async def internal_event_callback(event: PipelineEvent):
+            nonlocal conversation_active, tts_end_event, tts_playback_task
+            if event.type == PipelineEventType.WAKE_WORD_END:
+                conversation_active = True
+            elif event.type == PipelineEventType.TTS_END:
+                tts_output = event.data.get('tts_output', {})
+                audio_url = tts_output.get('url')
+                if audio_url:
+                    audio_length = await get_audio_length(audio_url)
+                    _LOGGER.debug(f"TTS audio length: {audio_length} seconds")
+                    if tts_playback_task:
+                        tts_playback_task.cancel()
+                    tts_playback_task = asyncio.create_task(schedule_next_listen(audio_length))
+                else:
+                    tts_end_event.set()
+            
+            if event_callback:
+                await event_callback(event)
+
+        async def schedule_next_listen(delay: float):
+            await asyncio.sleep(delay)
+            tts_end_event.set()
+
         while not stt_stream.closed:
             try:
                 current_time = time.time()
                 if last_interaction_time and current_time - last_interaction_time > 300:
                     conversation_id = None
+                    conversation_active = False
 
+                if not conversation_active:
+                    # Wait for wake word detection
+                    await asyncio.sleep(0.1)
+                    continue
+
+                tts_end_event.clear()
                 result = await assist_run(
                     hass,
                     data,
                     context=context,
-                    event_callback=event_callback,
+                    event_callback=internal_event_callback,
                     stt_stream=stt_stream,
                     conversation_id=conversation_id
                 )
@@ -267,9 +322,23 @@ def run_forever(
                 if new_conversation_id:
                     conversation_id = new_conversation_id
                     last_interaction_time = current_time
+
                 _LOGGER.debug(f"Conversation ID: {conversation_id}")
+
+                # Wait for TTS to end before starting the next listening phase
+                await tts_end_event.wait()
+
+                # Check if the conversation was cancelled or ended
+                if PipelineEventType.RUN_END in result["events"]:
+                    run_end_data = result["events"][PipelineEventType.RUN_END].get("data", {})
+                    if run_end_data.get("error") or "stt-no-text-recognized" in str(run_end_data):
+                        conversation_active = False
+
             except Exception as e:
                 _LOGGER.exception(f"run_assist error: {e}")
+                conversation_active = False
+                if tts_playback_task:
+                    tts_playback_task.cancel()
 
     # Create coroutines
     run_stream_coro = run_stream()
