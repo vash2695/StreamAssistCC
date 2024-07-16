@@ -30,7 +30,10 @@ _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "stream_assist_cc"
 EVENTS = ["wake", "stt", "intent", "tts"]
-
+CANCELLATION_PHRASES = [
+    "stop", "nevermind", "never mind", "thank you", "cancel that", "cancel",
+    "abort", "quit", "exit", "end", "forget it", "that's all", "that is all"
+]
 
 def init_entity(entity: Entity, key: str, config_entry: ConfigEntry) -> str:
     unique_id = config_entry.entry_id[:7]
