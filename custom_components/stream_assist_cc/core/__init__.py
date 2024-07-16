@@ -110,6 +110,7 @@ async def assist_run(
     conversation_id: str | None = None
 ) -> dict:
     _LOGGER.debug(f"assist_run called with conversation_id: {conversation_id}")
+    
     # 1. Process assist_pipeline settings
     assist = data.get("assist", {})
 
@@ -143,8 +144,13 @@ async def assist_run(
 
     # 2. Setup Pipeline Run
     events = {}
-    pipeline_run = None  # Define pipeline_run before the internal_event_callback
+    pipeline_run = None
     tts_duration = 0
+
+    async def calculate_tts_duration(tts_url):
+        nonlocal tts_duration
+        tts_duration = await get_audio_length(tts_url)
+        _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
 
     async def internal_event_callback(event: PipelineEvent):
         nonlocal pipeline_run, tts_duration
@@ -162,12 +168,10 @@ async def assist_run(
         elif event.type == PipelineEventType.STT_END:
             stt_text = event.data.get("stt_output", {}).get("text", "").lower()
             
-            # Check if the entire phrase matches any cancellation phrase
             if re.match(r'^(' + '|'.join(CANCELLATION_PHRASES) + r')$', stt_text.strip()):
                 _LOGGER.info(f"Cancellation phrase detected: {stt_text}")
                 if player_entity_id and (media_id := data.get("cancellation_media")):
                     play_media(hass, player_entity_id, media_id, "music")
-                # Cancel the pipeline
                 pipeline_run.stop(PipelineStage.STT)
             elif player_entity_id and (media_id := data.get("stt_end_media")):
                 play_media(hass, player_entity_id, media_id, "music")
@@ -179,8 +183,7 @@ async def assist_run(
             if player_entity_id:
                 tts = event.data["tts_output"]
                 tts_url = tts["url"]
-                # Schedule the audio length calculation
-                hass.async_create_task(calculate_tts_duration(tts_url))
+                await calculate_tts_duration(tts_url)
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
 
         if event_callback:
@@ -188,16 +191,17 @@ async def assist_run(
                 await event_callback(event)
             else:
                 event_callback(event)
+
     def sync_event_callback(event: PipelineEvent):
         asyncio.create_task(internal_event_callback(event))
-        
+
     pipeline_run = PipelineRun(
         hass,
         context=context,
         pipeline=pipeline,
         start_stage=assist["start_stage"],
         end_stage=assist["end_stage"],
-        event_callback=sync_event_callback,  # Use the synchronous wrapper
+        event_callback=sync_event_callback,
         tts_audio_output=assist.get("tts_audio_output"),
         wake_word_settings=new(WakeWordSettings, assist.get("wake_word_settings")),
         audio_settings=new(AudioSettings, assist.get("audio_settings")),
@@ -207,7 +211,7 @@ async def assist_run(
     pipeline_input = PipelineInput(
         run=pipeline_run,
         stt_metadata=stt.SpeechMetadata(
-            language="",  # set in async_pipeline_from_audio_stream
+            language="",
             format=stt.AudioFormats.WAV,
             codec=stt.AudioCodecs.PCM,
             bit_rate=stt.AudioBitRates.BITRATE_16,
@@ -217,8 +221,8 @@ async def assist_run(
         stt_stream=stt_stream,
         intent_input=assist.get("intent_input"),
         tts_input=assist.get("tts_input"),
-        conversation_id=conversation_id,  # Pass the conversation_id
-        device_id=data.get("device_id"),  # Pass the device_id if available
+        conversation_id=conversation_id,
+        device_id=data.get("device_id"),
     )
 
     try:
@@ -238,20 +242,22 @@ async def assist_run(
             intent_output = events[PipelineEventType.INTENT_END].get('data', {}).get('intent_output', {})
             result_conversation_id = intent_output.get('conversation_id')
 
-        return {"events": events, "conversation_id": result_conversation_id}
-        # Wait for TTS playback to complete
-        if tts_duration > 0:
-            _LOGGER.debug(f"Waiting for {tts_duration} seconds before next interaction")
-            await asyncio.sleep(tts_duration)
+        _LOGGER.debug(f"Pipeline execution completed. TTS duration: {tts_duration}")
+
+        # Note: We don't need to wait for TTS playback here. 
+        # This waiting is now handled in the run_assist function.
 
         return {
             "events": events, 
             "conversation_id": result_conversation_id,
             "tts_duration": tts_duration
         }
-        
-    except AttributeError:
-        pass  # 'PipelineRun' object has no attribute 'stt_provider'
+
+    except AttributeError as e:
+        _LOGGER.exception(f"AttributeError in assist_run: {e}")
+        # 'PipelineRun' object has no attribute 'stt_provider'
+    except Exception as e:
+        _LOGGER.exception(f"Unexpected error in assist_run: {e}")
     finally:
         if stt_stream:
             stt_stream.stop()
@@ -294,39 +300,45 @@ def run_forever(
                 await asyncio.sleep(30)
 
     async def run_assist():
-        _LOGGER.debug("Entering run_assist coroutine")
-        conversation_id = None
-        last_interaction_time = None
-        while running and not stt_stream.closed:
-            try:
-                _LOGGER.debug("Starting assist run")
-                current_time = time.time()
-                if last_interaction_time and current_time - last_interaction_time > 300:
-                    _LOGGER.debug("Resetting conversation ID due to inactivity")
-                    conversation_id = None
-                result = await assist_run(
-                    hass,
-                    data,
-                    context=context,
-                    event_callback=event_callback,
-                    stt_stream=stt_stream,
-                    conversation_id=conversation_id
-                )
-                _LOGGER.debug(f"Assist run completed. Result: {result}")
-                new_conversation_id = result.get("conversation_id")
-                tts_duration = result.get("tts_duration", 0)
-                
-                if new_conversation_id:
-                    conversation_id = new_conversation_id
-                    last_interaction_time = current_time
-                _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
-                # Wait for a short period after TTS playback before next run
-                await asyncio.sleep(max(1, tts_duration + 1))
-            except Exception as e:
-                _LOGGER.exception(f"run_assist error: {e}")
-            if running:
-                _LOGGER.debug("Waiting 1 second before next assist run")
+    _LOGGER.debug("Entering run_assist coroutine")
+    conversation_id = None
+    last_interaction_time = None
+    while running and not stt_stream.closed:
+        try:
+            _LOGGER.debug("Starting assist run")
+            current_time = time.time()
+            if last_interaction_time and current_time - last_interaction_time > 300:
+                _LOGGER.debug("Resetting conversation ID due to inactivity")
+                conversation_id = None
+
+            result = await assist_run(
+                hass,
+                data,
+                context=context,
+                event_callback=event_callback,
+                stt_stream=stt_stream,
+                conversation_id=conversation_id
+            )
+            _LOGGER.debug(f"Assist run completed. Result: {result}")
+            new_conversation_id = result.get("conversation_id")
+            tts_duration = result.get("tts_duration", 0)
+            
+            if new_conversation_id:
+                conversation_id = new_conversation_id
+                last_interaction_time = current_time
+            _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
+
+            # Wait for TTS playback to complete before next run
+            if tts_duration > 0:
+                _LOGGER.debug(f"Waiting for {tts_duration} seconds before next interaction")
+                await asyncio.sleep(tts_duration)
+            else:
+                # If no TTS, wait for a short time before next run
                 await asyncio.sleep(1)
+
+        except Exception as e:
+            _LOGGER.exception(f"run_assist error: {e}")
+            await asyncio.sleep(1)
 
     _LOGGER.debug("Creating coroutines")
     run_stream_task = hass.loop.create_task(run_stream(), name="stream_assist_cc_run_stream")
