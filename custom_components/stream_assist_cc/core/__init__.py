@@ -87,25 +87,34 @@ async def stream_run(hass: HomeAssistant, data: dict, stt_stream: Stream) -> Non
 
     await hass.async_add_executor_job(stt_stream.run)
 
-async def get_audio_length(file_path: str) -> float:
-    if file_path.startswith(('http://', 'https://', '/api/')):
-        async with aiohttp.ClientSession() as session:
-            async with session.get(file_path) as response:
-                if response.status == 200:
-                    with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as temp_file:
-                        temp_file_path = temp_file.name
-                    async with aiofiles.open(temp_file_path, mode='wb') as f:
-                        await f.write(await response.read())
-                    try:
-                        audio = MP3(temp_file_path)
-                        return audio.info.length
-                    finally:
-                        import os
-                        os.unlink(temp_file_path)
-    else:
-        audio = MP3(file_path)
-        return audio.info.length
-    return 0
+async def get_tts_duration(hass: HomeAssistant, tts_url: str) -> float:
+    try:
+        # Ensure we have the full URL
+        if tts_url.startswith('/'):
+            base_url = get_url(hass)
+            full_url = f"{base_url}{tts_url}"
+        else:
+            full_url = tts_url
+
+        # Use Home Assistant's HTTP client to get the file
+        client = request_handler_factory(hass.http.app, hass).get_client_session()
+        async with client.get(full_url) as response:
+            if response.status != 200:
+                _LOGGER.error(f"Failed to fetch TTS audio: HTTP {response.status}")
+                return 0
+            
+            content = await response.read()
+
+        # Use mutagen to get the duration
+        audio = MP3(io.BytesIO(content))
+        duration = audio.info.length
+        
+        _LOGGER.debug(f"TTS audio duration: {duration} seconds")
+        return duration
+
+    except Exception as e:
+        _LOGGER.error(f"Error getting TTS duration: {e}")
+        return 0
     
 async def assist_run(
     hass: HomeAssistant,
@@ -155,12 +164,8 @@ async def assist_run(
     
     async def calculate_tts_duration(tts_url):
         nonlocal tts_duration
-        try:
-            tts_duration = await get_audio_length(tts_url)
-            _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
-        except Exception as e:
-            _LOGGER.error(f"Error calculating TTS duration: {e}")
-            tts_duration = 5  # Set a default duration if calculation fails
+        tts_duration = await get_tts_duration(hass, tts_url)
+        _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
     
     async def internal_event_callback(event: PipelineEvent):
         nonlocal pipeline_run, tts_duration
@@ -193,8 +198,10 @@ async def assist_run(
             if player_entity_id:
                 tts = event.data["tts_output"]
                 tts_url = tts["url"]
-                await calculate_tts_duration(tts_url)
+                # Start playing media immediately
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
+                # Calculate duration
+                await calculate_tts_duration(tts_url)
     
         if event_callback:
             if inspect.iscoroutinefunction(event_callback):
