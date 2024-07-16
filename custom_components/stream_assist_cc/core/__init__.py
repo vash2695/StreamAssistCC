@@ -31,8 +31,9 @@ _LOGGER = logging.getLogger(__name__)
 DOMAIN = "stream_assist_cc"
 EVENTS = ["wake", "stt", "intent", "tts"]
 CANCELLATION_PHRASES = [
-    "stop", "nevermind", "never mind", "thank you", "cancel that", "cancel",
-    "abort", "quit", "exit", "end", "forget it", "that's all", "that is all"
+    r'\bnevermind\b', r'\bnever mind\b', r'\bthank you\b', r'\bcancel that\b', 
+    r'\bcancel\b', r'\babort\b', r'\bquit\b', r'\bexit\b', r'\bend\b', r'\bforget it\b', 
+    r'\bthat\'s all\b', r'\bthat is all\b'
 ]
 
 def init_entity(entity: Entity, key: str, config_entry: ConfigEntry) -> str:
@@ -122,40 +123,41 @@ async def assist_run(
     pipeline_run = None  # Define pipeline_run before the internal_event_callback
 
     def internal_event_callback(event: PipelineEvent):
-        nonlocal pipeline_run  # Make pipeline_run accessible inside this function
-        _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
+    nonlocal pipeline_run
+    _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
 
-        events[event.type] = (
-            {"data": event.data, "timestamp": event.timestamp}
-            if event.data
-            else {"timestamp": event.timestamp}
-        )
+    events[event.type] = (
+        {"data": event.data, "timestamp": event.timestamp}
+        if event.data
+        else {"timestamp": event.timestamp}
+    )
 
-        if event.type == PipelineEventType.STT_START:
-            if player_entity_id and (media_id := data.get("stt_start_media")):
+    if event.type == PipelineEventType.STT_START:
+        if player_entity_id and (media_id := data.get("stt_start_media")):
+            play_media(hass, player_entity_id, media_id, "music")
+    elif event.type == PipelineEventType.STT_END:
+        stt_text = event.data.get("stt_output", {}).get("text", "").lower()
+        
+        # Check if the entire phrase matches any cancellation phrase
+        if re.match(r'^(' + '|'.join(CANCELLATION_PHRASES) + r')$', stt_text.strip()):
+            _LOGGER.info(f"Cancellation phrase detected: {stt_text}")
+            if player_entity_id and (media_id := data.get("cancellation_media")):
                 play_media(hass, player_entity_id, media_id, "music")
-        elif event.type == PipelineEventType.STT_END:
-            stt_text = event.data.get("stt_output", {}).get("text", "").lower()
-            
-            if any(phrase in stt_text for phrase in CANCELLATION_PHRASES):
-                _LOGGER.info(f"Cancellation phrase detected: {stt_text}")
-                if player_entity_id and (media_id := data.get("cancellation_media")):
-                    play_media(hass, player_entity_id, media_id, "music")
-                # Cancel the pipeline
-                pipeline_run.stop(PipelineStage.STT)
-            elif player_entity_id and (media_id := data.get("stt_end_media")):
+            # Cancel the pipeline
+            pipeline_run.stop(PipelineStage.STT)
+        elif player_entity_id and (media_id := data.get("stt_end_media")):
+            play_media(hass, player_entity_id, media_id, "music")
+    elif event.type == PipelineEventType.ERROR:
+        if event.data.get("code") == "stt-no-text-recognized":
+            if player_entity_id and (media_id := data.get("stt_error_media")):
                 play_media(hass, player_entity_id, media_id, "music")
-        elif event.type == PipelineEventType.ERROR:
-            if event.data.get("code") == "stt-no-text-recognized":
-                if player_entity_id and (media_id := data.get("stt_error_media")):
-                    play_media(hass, player_entity_id, media_id, "music")
-        elif event.type == PipelineEventType.TTS_END:
-            if player_entity_id:
-                tts = event.data["tts_output"]
-                play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
+    elif event.type == PipelineEventType.TTS_END:
+        if player_entity_id:
+            tts = event.data["tts_output"]
+            play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
 
-        if event_callback:
-            event_callback(event)
+    if event_callback:
+        event_callback(event)
 
     pipeline_run = PipelineRun(
         hass,
