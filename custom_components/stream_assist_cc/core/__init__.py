@@ -1,5 +1,6 @@
 import asyncio
 import aiohttp
+import aiofiles
 import os
 import tempfile
 import logging
@@ -84,17 +85,19 @@ async def stream_run(hass: HomeAssistant, data: dict, stt_stream: Stream) -> Non
     await hass.async_add_executor_job(stt_stream.run)
 
 async def get_audio_length(file_path: str) -> float:
-    if file_path.startswith(('http://', 'https://')):
+    if file_path.startswith(('http://', 'https://', '/api/')):
         async with aiohttp.ClientSession() as session:
             async with session.get(file_path) as response:
                 if response.status == 200:
                     with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as temp_file:
-                        temp_file.write(await response.read())
                         temp_file_path = temp_file.name
+                    async with aiofiles.open(temp_file_path, mode='wb') as f:
+                        await f.write(await response.read())
                     try:
                         audio = MP3(temp_file_path)
                         return audio.info.length
                     finally:
+                        import os
                         os.unlink(temp_file_path)
     else:
         audio = MP3(file_path)
@@ -149,8 +152,12 @@ async def assist_run(
 
     async def calculate_tts_duration(tts_url):
         nonlocal tts_duration
-        tts_duration = await get_audio_length(tts_url)
-        _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
+        try:
+            tts_duration = await get_audio_length(tts_url)
+            _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
+        except Exception as e:
+            _LOGGER.error(f"Error calculating TTS duration: {e}")
+            tts_duration = 0  # Set a default duration if calculation fails
 
     async def internal_event_callback(event: PipelineEvent):
         nonlocal pipeline_run, tts_duration
