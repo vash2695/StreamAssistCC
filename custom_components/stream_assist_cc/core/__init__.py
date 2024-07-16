@@ -80,7 +80,7 @@ async def assist_run(
     context: Context = None,
     event_callback: PipelineEventCallback = None,
     stt_stream: Stream = None,
-    conversation_id: str | None = None #continued_conversation
+    conversation_id: str | None = None
 ) -> dict:
     _LOGGER.debug(f"assist_run called with conversation_id: {conversation_id}")
     # 1. Process assist_pipeline settings
@@ -132,6 +132,10 @@ async def assist_run(
         elif event.type == PipelineEventType.STT_END:
             if player_entity_id and (media_id := data.get("stt_end_media")):
                 play_media(hass, player_entity_id, media_id, "music")
+        elif event.type == PipelineEventType.ERROR:
+            if event.data.get("code") == "stt-no-text-recognized":
+                if player_entity_id and (media_id := data.get("stt_error_media")):
+                    play_media(hass, player_entity_id, media_id, "music")
         elif event.type == PipelineEventType.TTS_END:
             if player_entity_id:
                 tts = event.data["tts_output"]
