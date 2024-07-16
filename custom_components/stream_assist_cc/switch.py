@@ -22,7 +22,7 @@ async def async_setup_entry(
 
 
 class StreamAssistCCSwitch(SwitchEntity):
-    on_close: Callable = None
+    on_close: Callable | None = None
 
     def __init__(self, config_entry: ConfigEntry):
         self._attr_is_on = False
@@ -57,12 +57,17 @@ class StreamAssistCCSwitch(SwitchEntity):
         for event in EVENTS:
             async_dispatcher_send(self.hass, f"{self.uid}-{event}", None)
 
-        self.on_close = run_forever(
-            self.hass,
-            self.options,
-            context=self._context,
-            event_callback=self.event_callback,
-        )
+        try:
+            self.on_close = run_forever(
+                self.hass,
+                self.options,
+                context=self._context,
+                event_callback=self.event_callback,
+            )
+        except Exception as e:
+            _LOGGER.error(f"Error turning on StreamAssistCC: {e}")
+            self._attr_is_on = False
+            self._async_write_ha_state()
 
     async def async_turn_off(self) -> None:
         if not self._attr_is_on:
@@ -71,8 +76,19 @@ class StreamAssistCCSwitch(SwitchEntity):
         self._attr_is_on = False
         self._async_write_ha_state()
 
-        self.on_close()
+        if self.on_close is not None:
+            try:
+                await self.on_close()
+            except Exception as e:
+                _LOGGER.error(f"Error closing StreamAssistCC: {e}")
+            finally:
+                self.on_close = None
 
     async def async_will_remove_from_hass(self) -> None:
-        if self._attr_is_on:
-            self.on_close()
+        if self._attr_is_on and self.on_close is not None:
+            try:
+                await self.on_close()
+            except Exception as e:
+                _LOGGER.error(f"Error closing StreamAssistCC during removal: {e}")
+            finally:
+                self.on_close = None
