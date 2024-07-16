@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import time
+import re
 from typing import Callable
 
 from homeassistant.components import assist_pipeline
