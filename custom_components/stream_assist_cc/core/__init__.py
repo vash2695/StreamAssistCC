@@ -26,13 +26,13 @@ from homeassistant.components.assist_pipeline import (
     WakeWordSettings,
 )
 from homeassistant.components.camera import Camera
-from homeassistant.components.http import HomeAssistantView
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, Context
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import Entity, DeviceInfo
 from homeassistant.helpers.entity_component import EntityComponent
 from homeassistant.helpers.network import get_url
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .stream import Stream
 
@@ -96,14 +96,14 @@ async def get_tts_duration(hass: HomeAssistant, tts_url: str) -> float:
         else:
             full_url = tts_url
 
-        # Use Home Assistant's HTTP client to get the file
-        async with hass.http.async_get_client_session() as session:
-            async with session.get(full_url) as response:
-                if response.status != 200:
-                    _LOGGER.error(f"Failed to fetch TTS audio: HTTP {response.status}")
-                    return 0
-                
-                content = await response.read()
+        # Use Home Assistant's aiohttp client session
+        session = async_get_clientsession(hass)
+        async with session.get(full_url) as response:
+            if response.status != 200:
+                _LOGGER.error(f"Failed to fetch TTS audio: HTTP {response.status}")
+                return 0
+            
+            content = await response.read()
 
         # Use mutagen to get the duration
         audio = MP3(io.BytesIO(content))
