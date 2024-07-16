@@ -149,7 +149,7 @@ async def assist_run(
     events = {}
     pipeline_run = None
     tts_duration = 0
-
+    
     async def calculate_tts_duration(tts_url):
         nonlocal tts_duration
         try:
@@ -157,18 +157,18 @@ async def assist_run(
             _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
         except Exception as e:
             _LOGGER.error(f"Error calculating TTS duration: {e}")
-            tts_duration = 0  # Set a default duration if calculation fails
-
+            tts_duration = 5  # Set a default duration if calculation fails
+    
     async def internal_event_callback(event: PipelineEvent):
         nonlocal pipeline_run, tts_duration
         _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
-
+    
         events[event.type] = (
             {"data": event.data, "timestamp": event.timestamp}
             if event.data
             else {"timestamp": event.timestamp}
         )
-
+    
         if event.type == PipelineEventType.STT_START:
             if player_entity_id and (media_id := data.get("stt_start_media")):
                 play_media(hass, player_entity_id, media_id, "music")
@@ -192,7 +192,7 @@ async def assist_run(
                 tts_url = tts["url"]
                 await calculate_tts_duration(tts_url)
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
-
+    
         if event_callback:
             if inspect.iscoroutinefunction(event_callback):
                 await event_callback(event)
@@ -251,25 +251,18 @@ async def assist_run(
 
         _LOGGER.debug(f"Pipeline execution completed. TTS duration: {tts_duration}")
 
-        # Note: We don't need to wait for TTS playback here. 
-        # This waiting is now handled in the run_assist function.
-
         return {
             "events": events, 
             "conversation_id": result_conversation_id,
             "tts_duration": tts_duration
         }
 
-    except AttributeError as e:
-        _LOGGER.exception(f"AttributeError in assist_run: {e}")
-        # 'PipelineRun' object has no attribute 'stt_provider'
     except Exception as e:
-        _LOGGER.exception(f"Unexpected error in assist_run: {e}")
+        _LOGGER.exception(f"Error in assist_run: {e}")
     finally:
         if stt_stream:
             stt_stream.stop()
 
-    # If we reach here due to an exception, return a default dictionary
     return {"events": events, "conversation_id": None, "tts_duration": 0}
 
 
@@ -317,7 +310,7 @@ def run_forever(
                 if last_interaction_time and current_time - last_interaction_time > 300:
                     _LOGGER.debug("Resetting conversation ID due to inactivity")
                     conversation_id = None
-                
+    
                 result = await assist_run(
                     hass,
                     data,
@@ -334,7 +327,7 @@ def run_forever(
                     conversation_id = new_conversation_id
                     last_interaction_time = current_time
                 _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
-                
+    
                 # Wait for TTS playback to complete before next run
                 if tts_duration > 0:
                     _LOGGER.debug(f"Waiting for {tts_duration} seconds before next interaction")
@@ -343,7 +336,7 @@ def run_forever(
                     # If no TTS, wait for a short time before next run
                     _LOGGER.debug("No TTS duration, waiting for 1 second before next run")
                     await asyncio.sleep(1)
-            
+    
             except Exception as e:
                 _LOGGER.exception(f"run_assist error: {e}")
                 await asyncio.sleep(1)
