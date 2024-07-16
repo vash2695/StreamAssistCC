@@ -307,39 +307,40 @@ def run_forever(
             try:
                 _LOGGER.debug("Starting assist run")
                 current_time = time.time()
-            if last_interaction_time and current_time - last_interaction_time > 300:
-                _LOGGER.debug("Resetting conversation ID due to inactivity")
-                conversation_id = None
-
-            result = await assist_run(
-                hass,
-                data,
-                context=context,
-                event_callback=event_callback,
-                stt_stream=stt_stream,
-                conversation_id=conversation_id
-            )
-            _LOGGER.debug(f"Assist run completed. Result: {result}")
-            new_conversation_id = result.get("conversation_id")
-            tts_duration = result.get("tts_duration", 0)
+                if last_interaction_time and current_time - last_interaction_time > 300:
+                    _LOGGER.debug("Resetting conversation ID due to inactivity")
+                    conversation_id = None
+                
+                result = await assist_run(
+                    hass,
+                    data,
+                    context=context,
+                    event_callback=event_callback,
+                    stt_stream=stt_stream,
+                    conversation_id=conversation_id
+                )
+                _LOGGER.debug(f"Assist run completed. Result: {result}")
+                new_conversation_id = result.get("conversation_id")
+                tts_duration = result.get("tts_duration", 0)
+                
+                if new_conversation_id:
+                    conversation_id = new_conversation_id
+                    last_interaction_time = current_time
+                _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
+                
+                # Wait for TTS playback to complete before next run
+                if tts_duration > 0:
+                    _LOGGER.debug(f"Waiting for {tts_duration} seconds before next interaction")
+                    await asyncio.sleep(tts_duration)
+                else:
+                    # If no TTS, wait for a short time before next run
+                    _LOGGER.debug("No TTS duration, waiting for 1 second before next run")
+                    await asyncio.sleep(1)
             
-            if new_conversation_id:
-                conversation_id = new_conversation_id
-                last_interaction_time = current_time
-            _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
-
-            # Wait for TTS playback to complete before next run
-            if tts_duration > 0:
-                _LOGGER.debug(f"Waiting for {tts_duration} seconds before next interaction")
-                await asyncio.sleep(tts_duration)
-            else:
-                # If no TTS, wait for a short time before next run
+            except Exception as e:
+                _LOGGER.exception(f"run_assist error: {e}")
                 await asyncio.sleep(1)
-
-        except Exception as e:
-            _LOGGER.exception(f"run_assist error: {e}")
-            await asyncio.sleep(1)
-
+    
     _LOGGER.debug("Creating coroutines")
     run_stream_task = hass.loop.create_task(run_stream(), name="stream_assist_cc_run_stream")
     run_assist_task = hass.loop.create_task(run_assist(), name="stream_assist_cc_run_assist")
