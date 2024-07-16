@@ -1,5 +1,5 @@
 import asyncio
-from mutagen import MP3
+from mutagen.mp3 import MP3
 import aiohttp
 import os
 import tempfile
