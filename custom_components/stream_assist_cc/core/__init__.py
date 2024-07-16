@@ -2,6 +2,7 @@ import asyncio
 import aiohttp
 import aiofiles
 import os
+import io
 import tempfile
 import logging
 import inspect
@@ -25,11 +26,13 @@ from homeassistant.components.assist_pipeline import (
     WakeWordSettings,
 )
 from homeassistant.components.camera import Camera
+from homeassistant.components.http.view import request_handler_factory
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, Context
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import Entity, DeviceInfo
 from homeassistant.helpers.entity_component import EntityComponent
+from homeassistant.helpers.network import get_url
 
 from .stream import Stream
 
