@@ -41,7 +41,9 @@ class StreamAssistCCSwitch(SwitchEntity):
         )
         name, state = code.split("-", 1)
         _LOGGER.debug(f"Dispatching event: {self.uid}-{name}, state: {state}")
-        async_dispatcher_send(self.hass, f"{self.uid}-{name}", state, event.data)
+        self.hass.loop.call_soon_threadsafe(
+            async_dispatcher_send, self.hass, f"{self.uid}-{name}", state, event.data
+        )
 
     async def async_added_to_hass(self) -> None:
         _LOGGER.debug("StreamAssistCCSwitch added to HASS")
