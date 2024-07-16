@@ -21,7 +21,6 @@ async def async_setup_entry(
     _LOGGER.debug("Setting up StreamAssistCCSwitch")
     async_add_entities([StreamAssistCCSwitch(config_entry)])
 
-
 class StreamAssistCCSwitch(SwitchEntity):
     on_close: Callable | None = None
 
@@ -29,7 +28,6 @@ class StreamAssistCCSwitch(SwitchEntity):
         _LOGGER.debug("Initializing StreamAssistCCSwitch")
         self._attr_is_on = False
         self._attr_should_poll = False
-
         self.options = config_entry.options.copy()
         self.uid = init_entity(self, "mic", config_entry)
         _LOGGER.debug(f"StreamAssistCCSwitch initialized with UID: {self.uid}")
@@ -41,9 +39,7 @@ class StreamAssistCCSwitch(SwitchEntity):
             if event.type == PipelineEventType.ERROR
             else event.type.replace("_word", "")
         )
-
         name, state = code.split("-", 1)
-
         _LOGGER.debug(f"Dispatching event: {self.uid}-{name}, state: {state}")
         async_dispatcher_send(self.hass, f"{self.uid}-{name}", state, event.data)
 
@@ -93,7 +89,7 @@ class StreamAssistCCSwitch(SwitchEntity):
         if self.on_close is not None:
             try:
                 _LOGGER.debug("Calling on_close function")
-                await self.on_close()
+                self.on_close()  # Changed from await self.on_close()
                 _LOGGER.debug("on_close function completed successfully")
             except Exception as e:
                 _LOGGER.error(f"Error closing StreamAssistCC: {e}")
@@ -106,7 +102,7 @@ class StreamAssistCCSwitch(SwitchEntity):
         if self._attr_is_on and self.on_close is not None:
             try:
                 _LOGGER.debug("Calling on_close function during removal")
-                await self.on_close()
+                self.on_close()  # Changed from await self.on_close()
                 _LOGGER.debug("on_close function completed successfully during removal")
             except Exception as e:
                 _LOGGER.error(f"Error closing StreamAssistCC during removal: {e}")
