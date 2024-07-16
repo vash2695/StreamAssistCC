@@ -143,9 +143,10 @@ async def assist_run(
     # 2. Setup Pipeline Run
     events = {}
     pipeline_run = None  # Define pipeline_run before the internal_event_callback
+    tts_duration = 0
 
     def internal_event_callback(event: PipelineEvent):
-        nonlocal pipeline_run  # Make pipeline_run accessible inside this function
+        nonlocal pipeline_run, tts_duration  # Make pipeline_run accessible inside this function
         _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
 
         events[event.type] = (
@@ -176,6 +177,9 @@ async def assist_run(
         elif event.type == PipelineEventType.TTS_END:
             if player_entity_id:
                 tts = event.data["tts_output"]
+                tts_url = tts["url"]
+                tts_duration = await get_audio_length(tts_url)
+                _LOGGER.debug(f"TTS duration: {tts_duration} seconds")
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
 
         if event_callback:
@@ -229,7 +233,17 @@ async def assist_run(
             result_conversation_id = intent_output.get('conversation_id')
 
         return {"events": events, "conversation_id": result_conversation_id}
+        # Wait for TTS playback to complete
+        if tts_duration > 0:
+            _LOGGER.debug(f"Waiting for {tts_duration} seconds before next interaction")
+            await asyncio.sleep(tts_duration)
 
+        return {
+            "events": events, 
+            "conversation_id": result_conversation_id,
+            "tts_duration": tts_duration
+        }
+        
     except AttributeError:
         pass  # 'PipelineRun' object has no attribute 'stt_provider'
     finally:
@@ -237,7 +251,7 @@ async def assist_run(
             stt_stream.stop()
 
     # If we reach here due to an exception, return a default dictionary
-    return {"events": events, "conversation_id": None}
+    return {"events": events, "conversation_id": None, "tts_duration": 0}
 
 
 def play_media(hass: HomeAssistant, entity_id: str, media_id: str, media_type: str):
@@ -272,34 +286,39 @@ def run_forever(
             _LOGGER.debug("Waiting 30 seconds before next stream run")
             await asyncio.sleep(30)
 
-    async def run_assist():
-        _LOGGER.debug("Entering run_assist coroutine")
-        conversation_id = None
-        last_interaction_time = None
-        while not stt_stream.closed:
-            try:
-                _LOGGER.debug("Starting assist run")
-                current_time = time.time()
-                if last_interaction_time and current_time - last_interaction_time > 300:
-                    _LOGGER.debug("Resetting conversation ID due to inactivity")
-                    conversation_id = None
+async def run_assist():
+    _LOGGER.debug("Entering run_assist coroutine")
+    conversation_id = None
+    last_interaction_time = None
+    while not stt_stream.closed:
+        try:
+            _LOGGER.debug("Starting assist run")
+            current_time = time.time()
+            if last_interaction_time and current_time - last_interaction_time > 300:
+                _LOGGER.debug("Resetting conversation ID due to inactivity")
+                conversation_id = None
 
-                result = await assist_run(
-                    hass,
-                    data,
-                    context=context,
-                    event_callback=event_callback,
-                    stt_stream=stt_stream,
-                    conversation_id=conversation_id
-                )
-                _LOGGER.debug(f"Assist run completed. Result: {result}")
-                new_conversation_id = result.get("conversation_id")
-                if new_conversation_id:
-                    conversation_id = new_conversation_id
-                    last_interaction_time = current_time
-                _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
-            except Exception as e:
-                _LOGGER.exception(f"run_assist error: {e}")
+            result = await assist_run(
+                hass,
+                data,
+                context=context,
+                event_callback=event_callback,
+                stt_stream=stt_stream,
+                conversation_id=conversation_id
+            )
+            _LOGGER.debug(f"Assist run completed. Result: {result}")
+            new_conversation_id = result.get("conversation_id")
+            tts_duration = result.get("tts_duration", 0)
+            
+            if new_conversation_id:
+                conversation_id = new_conversation_id
+                last_interaction_time = current_time
+            _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
+
+            # Wait for a short period after TTS playback before next run
+            await asyncio.sleep(max(1, tts_duration + 1))
+        except Exception as e:
+            _LOGGER.exception(f"run_assist error: {e}")
             _LOGGER.debug("Waiting 1 second before next assist run")
             await asyncio.sleep(1)
 
