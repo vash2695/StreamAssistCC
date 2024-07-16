@@ -300,13 +300,13 @@ def run_forever(
                 await asyncio.sleep(30)
 
     async def run_assist():
-    _LOGGER.debug("Entering run_assist coroutine")
-    conversation_id = None
-    last_interaction_time = None
-    while running and not stt_stream.closed:
-        try:
-            _LOGGER.debug("Starting assist run")
-            current_time = time.time()
+        _LOGGER.debug("Entering run_assist coroutine")
+        conversation_id = None
+        last_interaction_time = None
+        while running and not stt_stream.closed:
+            try:
+                _LOGGER.debug("Starting assist run")
+                current_time = time.time()
             if last_interaction_time and current_time - last_interaction_time > 300:
                 _LOGGER.debug("Resetting conversation ID due to inactivity")
                 conversation_id = None
