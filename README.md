@@ -7,10 +7,10 @@ This fork is an attempt at implementing continued conversation and other feature
 Features added so far:
 * Continued conversation: conversation_id is preserved between interactions for a given entry with a timeout of 300 seconds, additional testing needed to verify timeout reliability
 * STT End media: Now both the start and end of the STT phase have options for audio feedback. Also added a field for this in the config options
+* Audio feedback for "no-text-recognized" events
 * More initial config options: All available options are now in the initial config screen
 
 Future goals:
-* Audio feedback for "no-text-recognized" events
 * Wake Word skip: Add some way to skip the wake word phase on follow up interactions
    * Could be implemented with a function call or just enabled for all interactions with a toggle in config
    * Must also skip intent with closing phrases like Thank You, Nevermind, That is all, Stop, etc. so the LLM doesn't get prompted needlessly
