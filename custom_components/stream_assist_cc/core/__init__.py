@@ -26,7 +26,6 @@ from homeassistant.components.assist_pipeline import (
     WakeWordSettings,
 )
 from homeassistant.components.camera import Camera
-from homeassistant.components.http.view import request_handler_factory
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, Context
