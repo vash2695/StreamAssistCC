@@ -188,6 +188,8 @@ async def assist_run(
                 await event_callback(event)
             else:
                 event_callback(event)
+    def sync_event_callback(event: PipelineEvent):
+        asyncio.create_task(internal_event_callback(event))
         
     pipeline_run = PipelineRun(
         hass,
@@ -195,7 +197,7 @@ async def assist_run(
         pipeline=pipeline,
         start_stage=assist["start_stage"],
         end_stage=assist["end_stage"],
-        event_callback=internal_event_callback,
+        event_callback=sync_event_callback,  # Use the synchronous wrapper
         tts_audio_output=assist.get("tts_audio_output"),
         wake_word_settings=new(WakeWordSettings, assist.get("wake_word_settings")),
         audio_settings=new(AudioSettings, assist.get("audio_settings")),
