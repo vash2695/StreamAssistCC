@@ -124,50 +124,50 @@ async def assist_run(
     pipeline_run = None  # Define pipeline_run before the internal_event_callback
 
     def internal_event_callback(event: PipelineEvent):
-    nonlocal pipeline_run
-    _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
+        nonlocal pipeline_run  # Make pipeline_run accessible inside this function
+        _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
 
-    events[event.type] = (
-        {"data": event.data, "timestamp": event.timestamp}
-        if event.data
-        else {"timestamp": event.timestamp}
-    )
+        events[event.type] = (
+            {"data": event.data, "timestamp": event.timestamp}
+            if event.data
+            else {"timestamp": event.timestamp}
+        )
 
-    if event.type == PipelineEventType.STT_START:
-        if player_entity_id and (media_id := data.get("stt_start_media")):
-            play_media(hass, player_entity_id, media_id, "music")
-    elif event.type == PipelineEventType.STT_END:
-        stt_text = event.data.get("stt_output", {}).get("text", "").lower()
-        
-        # Check if the entire phrase matches any cancellation phrase
-        if re.match(r'^(' + '|'.join(CANCELLATION_PHRASES) + r')$', stt_text.strip()):
-            _LOGGER.info(f"Cancellation phrase detected: {stt_text}")
-            if player_entity_id and (media_id := data.get("cancellation_media")):
+        if event.type == PipelineEventType.STT_START:
+            if player_entity_id and (media_id := data.get("stt_start_media")):
                 play_media(hass, player_entity_id, media_id, "music")
-            # Cancel the pipeline
-            pipeline_run.stop(PipelineStage.STT)
-        elif player_entity_id and (media_id := data.get("stt_end_media")):
-            play_media(hass, player_entity_id, media_id, "music")
-    elif event.type == PipelineEventType.ERROR:
-        if event.data.get("code") == "stt-no-text-recognized":
-            if player_entity_id and (media_id := data.get("stt_error_media")):
+        elif event.type == PipelineEventType.STT_END:
+            stt_text = event.data.get("stt_output", {}).get("text", "").lower()
+            
+            # Check if the entire phrase matches any cancellation phrase
+            if re.match(r'^(' + '|'.join(CANCELLATION_PHRASES) + r')$', stt_text.strip()):
+                _LOGGER.info(f"Cancellation phrase detected: {stt_text}")
+                if player_entity_id and (media_id := data.get("cancellation_media")):
+                    play_media(hass, player_entity_id, media_id, "music")
+                # Cancel the pipeline
+                pipeline_run.stop(PipelineStage.STT)
+            elif player_entity_id and (media_id := data.get("stt_end_media")):
                 play_media(hass, player_entity_id, media_id, "music")
-    elif event.type == PipelineEventType.TTS_END:
-        if player_entity_id:
-            tts = event.data["tts_output"]
-            play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
+        elif event.type == PipelineEventType.ERROR:
+            if event.data.get("code") == "stt-no-text-recognized":
+                if player_entity_id and (media_id := data.get("stt_error_media")):
+                    play_media(hass, player_entity_id, media_id, "music")
+        elif event.type == PipelineEventType.TTS_END:
+            if player_entity_id:
+                tts = event.data["tts_output"]
+                play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
 
-    if event_callback:
-        event_callback(event)
+        if event_callback:
+            event_callback(event)
 
     pipeline_run = PipelineRun(
         hass,
         context=context,
         pipeline=pipeline,
-        start_stage=assist["start_stage"],  # wake_word, stt, intent, tts
-        end_stage=assist["end_stage"],  # wake_word, stt, intent, tts
+        start_stage=assist["start_stage"],
+        end_stage=assist["end_stage"],
         event_callback=internal_event_callback,
-        tts_audio_output=assist.get("tts_audio_output"),  # None, wav, mp3
+        tts_audio_output=assist.get("tts_audio_output"),
         wake_word_settings=new(WakeWordSettings, assist.get("wake_word_settings")),
         audio_settings=new(AudioSettings, assist.get("audio_settings")),
     )
