@@ -267,7 +267,7 @@ def run_forever(
                 _LOGGER.debug(f"run_stream error {type(e)}: {e}")
             await asyncio.sleep(30)
 
-    async def run_assist():
+async def run_assist():
     conversation_id = None
     last_interaction_time = None
     conversation_active = False
