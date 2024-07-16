@@ -3,6 +3,7 @@ import aiohttp
 import os
 import tempfile
 import logging
+import inspect
 import time
 import re
 from typing import Callable
@@ -145,8 +146,8 @@ async def assist_run(
     pipeline_run = None  # Define pipeline_run before the internal_event_callback
     tts_duration = 0
 
-    def internal_event_callback(event: PipelineEvent):
-        nonlocal tts_duration
+    async def internal_event_callback(event: PipelineEvent):
+        nonlocal pipeline_run, tts_duration
         _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
 
         events[event.type] = (
@@ -183,11 +184,10 @@ async def assist_run(
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
 
         if event_callback:
-            hass.async_create_task(event_callback(event))
-    async def calculate_tts_duration(tts_url):
-        nonlocal tts_duration
-        tts_duration = await get_audio_length(tts_url)
-        _LOGGER.debug(f"TTS duration: {tts_duration} seconds")
+            if inspect.iscoroutinefunction(event_callback):
+                await event_callback(event)
+            else:
+                event_callback(event)
         
     pipeline_run = PipelineRun(
         hass,
