@@ -315,6 +315,22 @@ def run_forever(
         _LOGGER.debug("Entering run_assist coroutine")
         conversation_id = None
         last_interaction_time = None
+        tts_active = False
+    
+        async def custom_event_callback(event: PipelineEvent):
+            nonlocal tts_active
+            if event.type == PipelineEventType.TTS_START:
+                tts_active = True
+            elif event.type == PipelineEventType.TTS_END:
+                tts_active = False
+            
+            # Call the original event_callback
+            if event_callback:
+                if inspect.iscoroutinefunction(event_callback):
+                    await event_callback(event)
+                else:
+                    event_callback(event)
+    
         while running and not stt_stream.closed:
             try:
                 _LOGGER.debug("Starting assist run")
@@ -323,11 +339,19 @@ def run_forever(
                     _LOGGER.debug("Resetting conversation ID due to inactivity")
                     conversation_id = None
     
+                # Determine the start stage based on TTS activity
+                assist = data.get("assist", {}).copy()
+                if tts_active and assist.get("start_stage") == PipelineStage.WAKE_WORD:
+                    assist["start_stage"] = PipelineStage.STT
+                    _LOGGER.debug("TTS active, skipping wake word and starting from STT")
+                else:
+                    _LOGGER.debug(f"Starting from stage: {assist.get('start_stage')}")
+    
                 result = await assist_run(
                     hass,
-                    data,
+                    {**data, "assist": assist},
                     context=context,
-                    event_callback=event_callback,
+                    event_callback=custom_event_callback,
                     stt_stream=stt_stream,
                     conversation_id=conversation_id
                 )
@@ -339,7 +363,7 @@ def run_forever(
                     last_interaction_time = current_time
                 _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
     
-                # Remove the extra wait here, as it's now handled in internal_event_callback
+                # No need to wait here, as TTS activity is tracked by the event callback
     
             except Exception as e:
                 _LOGGER.exception(f"run_assist error: {e}")
