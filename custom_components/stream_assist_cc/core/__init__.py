@@ -122,23 +122,38 @@ async def assist_run(
     context: Context = None,
     event_callback: PipelineEventCallback = None,
     stt_stream: Stream = None,
-    conversation_id: str | None = None,
-    start_stage: PipelineStage = PipelineStage.WAKE_WORD
+    conversation_id: str | None = None
 ) -> dict:
-    _LOGGER.debug(f"assist_run called with conversation_id: {conversation_id}, start_stage: {start_stage}")
+    _LOGGER.debug(f"assist_run called with conversation_id: {conversation_id}")
     
     # 1. Process assist_pipeline settings
     assist = data.get("assist", {})
 
     if pipeline_id := data.get("pipeline_id"):
+        # get pipeline from pipeline ID
         pipeline = assist_pipeline.async_get_pipeline(hass, pipeline_id)
     elif pipeline_json := assist.get("pipeline"):
+        # get pipeline from JSON
         pipeline = Pipeline.from_json(pipeline_json)
     else:
+        # get default pipeline
         pipeline = assist_pipeline.async_get_pipeline(hass)
 
-    assist["start_stage"] = start_stage
-    assist["end_stage"] = assist.get("end_stage", PipelineStage.TTS)
+    if "start_stage" not in assist:
+        # auto select start stage
+        if pipeline.wake_word_entity:
+            assist["start_stage"] = PipelineStage.WAKE_WORD
+        elif pipeline.stt_engine:
+            assist["start_stage"] = PipelineStage.STT
+        else:
+            raise Exception("Unknown start_stage")
+
+    if "end_stage" not in assist:
+        # auto select end stage
+        if pipeline.tts_engine:
+            assist["end_stage"] = PipelineStage.TTS
+        else:
+            assist["end_stage"] = PipelineStage.INTENT
 
     player_entity_id = data.get("player_entity_id")
 
@@ -146,10 +161,14 @@ async def assist_run(
     events = {}
     pipeline_run = None
     tts_duration = 0
-    tts_url = None
+    
+    async def calculate_tts_duration(tts_url):
+        nonlocal tts_duration
+        tts_duration = await get_tts_duration(hass, tts_url)
+        _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
     
     async def internal_event_callback(event: PipelineEvent):
-        nonlocal pipeline_run, tts_url, tts_duration
+        nonlocal pipeline_run, tts_duration
         _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
     
         events[event.type] = (
@@ -160,28 +179,30 @@ async def assist_run(
     
         if event.type == PipelineEventType.STT_START:
             if player_entity_id and (media_id := data.get("stt_start_media")):
-                await play_media(hass, player_entity_id, media_id, "music")
+                play_media(hass, player_entity_id, media_id, "music")
         elif event.type == PipelineEventType.STT_END:
             stt_text = event.data.get("stt_output", {}).get("text", "").lower()
             
             if re.match(r'^(' + '|'.join(CANCELLATION_PHRASES) + r')$', stt_text.strip()):
                 _LOGGER.info(f"Cancellation phrase detected: {stt_text}")
                 if player_entity_id and (media_id := data.get("cancellation_media")):
-                    await play_media(hass, player_entity_id, media_id, "music")
+                    play_media(hass, player_entity_id, media_id, "music")
                 pipeline_run.stop(PipelineStage.STT)
             elif player_entity_id and (media_id := data.get("stt_end_media")):
-                await play_media(hass, player_entity_id, media_id, "music")
+                play_media(hass, player_entity_id, media_id, "music")
         elif event.type == PipelineEventType.ERROR:
             if event.data.get("code") == "stt-no-text-recognized":
                 if player_entity_id and (media_id := data.get("stt_error_media")):
-                    await play_media(hass, player_entity_id, media_id, "music")
+                    play_media(hass, player_entity_id, media_id, "music")
         elif event.type == PipelineEventType.TTS_END:
             if player_entity_id:
                 tts = event.data["tts_output"]
                 tts_url = tts["url"]
                 tts_duration = await get_tts_duration(hass, tts_url)
                 _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
-                await play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
+                play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
+                # Wait for TTS playback to complete
+                await asyncio.sleep(tts_duration)
     
         if event_callback:
             if inspect.iscoroutinefunction(event_callback):
@@ -189,16 +210,19 @@ async def assist_run(
             else:
                 event_callback(event)
 
+    def sync_event_callback(event: PipelineEvent):
+        asyncio.create_task(internal_event_callback(event))
+
     pipeline_run = PipelineRun(
         hass,
         context=context,
         pipeline=pipeline,
         start_stage=assist["start_stage"],
         end_stage=assist["end_stage"],
-        event_callback=lambda event: asyncio.create_task(internal_event_callback(event)),
+        event_callback=sync_event_callback,
         tts_audio_output=assist.get("tts_audio_output"),
-        wake_word_settings=WakeWordSettings(**assist.get("wake_word_settings", {})),
-        audio_settings=AudioSettings(**assist.get("audio_settings", {})),
+        wake_word_settings=new(WakeWordSettings, assist.get("wake_word_settings")),
+        audio_settings=new(AudioSettings, assist.get("audio_settings")),
     )
 
     # 3. Setup Pipeline Input
@@ -236,9 +260,7 @@ async def assist_run(
             intent_output = events[PipelineEventType.INTENT_END].get('data', {}).get('intent_output', {})
             result_conversation_id = intent_output.get('conversation_id')
 
-        if tts_url:
-            _LOGGER.debug(f"Waiting for TTS playback: {tts_duration} seconds")
-            await asyncio.sleep(tts_duration)
+        _LOGGER.debug(f"Pipeline execution completed. TTS duration: {tts_duration}")
 
         return {
             "events": events, 
@@ -292,18 +314,13 @@ def run_forever(
         _LOGGER.debug("Entering run_assist coroutine")
         conversation_id = None
         last_interaction_time = None
-        skip_wake_word = False
-        
         while running and not stt_stream.closed:
             try:
-                _LOGGER.debug(f"Starting assist run. Skip wake word: {skip_wake_word}")
+                _LOGGER.debug("Starting assist run")
                 current_time = time.time()
                 if last_interaction_time and current_time - last_interaction_time > 300:
                     _LOGGER.debug("Resetting conversation ID due to inactivity")
                     conversation_id = None
-                    skip_wake_word = False
-    
-                start_stage = PipelineStage.STT if skip_wake_word else PipelineStage.WAKE_WORD
     
                 result = await assist_run(
                     hass,
@@ -311,8 +328,7 @@ def run_forever(
                     context=context,
                     event_callback=event_callback,
                     stt_stream=stt_stream,
-                    conversation_id=conversation_id,
-                    start_stage=start_stage
+                    conversation_id=conversation_id
                 )
                 _LOGGER.debug(f"Assist run completed. Result: {result}")
                 new_conversation_id = result.get("conversation_id")
@@ -322,16 +338,7 @@ def run_forever(
                     last_interaction_time = current_time
                 _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
     
-                tts_duration = result.get("tts_duration", 0)
-                if tts_duration > 0:
-                    _LOGGER.debug(f"TTS playback finished, skipping wake word for next interaction")
-                    skip_wake_word = True
-                else:
-                    skip_wake_word = False
-                    _LOGGER.debug("No TTS playback, wake word will be required for next interaction")
-    
-                # Add a small delay to ensure all events are processed
-                await asyncio.sleep(0.1)
+                # Remove the extra wait here, as it's now handled in internal_event_callback
     
             except Exception as e:
                 _LOGGER.exception(f"run_assist error: {e}")
