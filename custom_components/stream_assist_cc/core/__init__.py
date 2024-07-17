@@ -178,6 +178,11 @@ async def assist_run(
     pipeline_run = None
     tts_duration = 0
     skip_next_wake = False
+
+    async def calculate_tts_duration(tts_url):
+        nonlocal tts_duration
+        tts_duration = await get_tts_duration(hass, tts_url)
+        _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
     
     async def internal_event_callback(event: PipelineEvent):
         nonlocal pipeline_run, tts_duration, skip_next_wake
