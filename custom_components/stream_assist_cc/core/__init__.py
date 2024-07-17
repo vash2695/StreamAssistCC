@@ -221,8 +221,6 @@ async def assist_run(
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
                 # Wait for TTS playback to complete
                 await asyncio.sleep(tts_duration)
-                _LOGGER.debug("Stopping pipeline at WAKE_WORD stage")
-                pipeline_run.stop(PipelineStage.WAKE_WORD)
     
         if event_callback:
             if inspect.iscoroutinefunction(event_callback):
