@@ -297,32 +297,26 @@ def run_forever(
     _LOGGER.debug("Entering run_forever function")
     stt_stream = Stream()
     running = True
+    tts_active = False  # Move this outside run_assist
 
     async def run_stream():
-        _LOGGER.debug("Entering run_stream coroutine")
-        while running and not stt_stream.closed:
-            try:
-                _LOGGER.debug("Attempting to run stream")
-                await stream_run(hass, data, stt_stream=stt_stream)
-                _LOGGER.debug("Stream run completed")
-            except Exception as e:
-                _LOGGER.error(f"run_stream error {type(e)}: {e}")
-            if running:
-                _LOGGER.debug("Waiting 30 seconds before next stream run")
-                await asyncio.sleep(30)
+        # ... (keep this function as is)
 
     async def run_assist():
         _LOGGER.debug("Entering run_assist coroutine")
         conversation_id = None
         last_interaction_time = None
-        tts_active = False
-    
+        nonlocal tts_active
+
         async def custom_event_callback(event: PipelineEvent):
             nonlocal tts_active
+            _LOGGER.debug(f"Event in custom_event_callback: {event.type}")
             if event.type == PipelineEventType.TTS_START:
                 tts_active = True
+                _LOGGER.debug("TTS active set to True")
             elif event.type == PipelineEventType.TTS_END:
                 tts_active = False
+                _LOGGER.debug("TTS active set to False")
             
             # Call the original event_callback
             if event_callback:
@@ -330,23 +324,25 @@ def run_forever(
                     await event_callback(event)
                 else:
                     event_callback(event)
-    
+
         while running and not stt_stream.closed:
             try:
-                _LOGGER.debug("Starting assist run")
+                _LOGGER.debug(f"Starting assist run. TTS active: {tts_active}")
                 current_time = time.time()
                 if last_interaction_time and current_time - last_interaction_time > 300:
                     _LOGGER.debug("Resetting conversation ID due to inactivity")
                     conversation_id = None
-    
+                    tts_active = False  # Reset TTS active state after inactivity
+
                 # Determine the start stage based on TTS activity
                 assist = data.get("assist", {}).copy()
-                if tts_active and assist.get("start_stage") == PipelineStage.WAKE_WORD:
+                original_start_stage = assist.get("start_stage")
+                if tts_active and original_start_stage == PipelineStage.WAKE_WORD:
                     assist["start_stage"] = PipelineStage.STT
                     _LOGGER.debug("TTS active, skipping wake word and starting from STT")
                 else:
-                    _LOGGER.debug(f"Starting from stage: {assist.get('start_stage')}")
-    
+                    _LOGGER.debug(f"Starting from stage: {original_start_stage}")
+
                 result = await assist_run(
                     hass,
                     {**data, "assist": assist},
@@ -362,13 +358,11 @@ def run_forever(
                     conversation_id = new_conversation_id
                     last_interaction_time = current_time
                 _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
-    
-                # No need to wait here, as TTS activity is tracked by the event callback
-    
+
             except Exception as e:
                 _LOGGER.exception(f"run_assist error: {e}")
                 await asyncio.sleep(1)
-    
+
     _LOGGER.debug("Creating coroutines")
     run_stream_task = hass.loop.create_task(run_stream(), name="stream_assist_cc_run_stream")
     run_assist_task = hass.loop.create_task(run_assist(), name="stream_assist_cc_run_assist")
