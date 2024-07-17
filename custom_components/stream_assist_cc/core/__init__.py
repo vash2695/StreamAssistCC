@@ -122,25 +122,23 @@ async def assist_run(
     context: Context = None,
     event_callback: PipelineEventCallback = None,
     stt_stream: Stream = None,
-    conversation_id: str | None = None
+    conversation_id: str | None = None,
+    start_stage: PipelineStage = PipelineStage.WAKE_WORD,
+    end_stage: PipelineStage = PipelineStage.TTS
 ) -> dict:
-    _LOGGER.debug(f"assist_run called with conversation_id: {conversation_id}")
+    _LOGGER.debug(f"assist_run called with conversation_id: {conversation_id}, start_stage: {start_stage}, end_stage: {end_stage}")
     
     # 1. Process assist_pipeline settings
     assist = data.get("assist", {})
 
     if pipeline_id := data.get("pipeline_id"):
-        # get pipeline from pipeline ID
         pipeline = assist_pipeline.async_get_pipeline(hass, pipeline_id)
     elif pipeline_json := assist.get("pipeline"):
-        # get pipeline from JSON
         pipeline = Pipeline.from_json(pipeline_json)
     else:
-        # get default pipeline
         pipeline = assist_pipeline.async_get_pipeline(hass)
 
     if "start_stage" not in assist:
-        # auto select start stage
         if pipeline.wake_word_entity:
             assist["start_stage"] = PipelineStage.WAKE_WORD
         elif pipeline.stt_engine:
@@ -149,7 +147,6 @@ async def assist_run(
             raise Exception("Unknown start_stage")
 
     if "end_stage" not in assist:
-        # auto select end stage
         if pipeline.tts_engine:
             assist["end_stage"] = PipelineStage.TTS
         else:
@@ -161,14 +158,10 @@ async def assist_run(
     events = {}
     pipeline_run = None
     tts_duration = 0
-    
-    async def calculate_tts_duration(tts_url):
-        nonlocal tts_duration
-        tts_duration = await get_tts_duration(hass, tts_url)
-        _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
+    wake_word_detected = False
     
     async def internal_event_callback(event: PipelineEvent):
-        nonlocal pipeline_run, tts_duration
+        nonlocal pipeline_run, tts_duration, wake_word_detected
         _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
     
         events[event.type] = (
@@ -177,7 +170,11 @@ async def assist_run(
             else {"timestamp": event.timestamp}
         )
     
-        if event.type == PipelineEventType.STT_START:
+        if event.type == PipelineEventType.WAKE_WORD_END:
+            wake_word_detected = True
+            if player_entity_id and (media_id := data.get("wake_word_end_media")):
+                play_media(hass, player_entity_id, media_id, "music")
+        elif event.type == PipelineEventType.STT_START:
             if player_entity_id and (media_id := data.get("stt_start_media")):
                 play_media(hass, player_entity_id, media_id, "music")
         elif event.type == PipelineEventType.STT_END:
@@ -217,9 +214,9 @@ async def assist_run(
         hass,
         context=context,
         pipeline=pipeline,
-        start_stage=assist["start_stage"],
-        end_stage=assist["end_stage"],
-        event_callback=sync_event_callback,
+        start_stage=start_stage,
+        end_stage=end_stage,
+        event_callback=internal_event_callback,
         tts_audio_output=assist.get("tts_audio_output"),
         wake_word_settings=new(WakeWordSettings, assist.get("wake_word_settings")),
         audio_settings=new(AudioSettings, assist.get("audio_settings")),
@@ -265,7 +262,8 @@ async def assist_run(
         return {
             "events": events, 
             "conversation_id": result_conversation_id,
-            "tts_duration": tts_duration
+            "tts_duration": tts_duration,
+            "wake_word_detected": wake_word_detected
         }
 
     except Exception as e:
@@ -274,7 +272,7 @@ async def assist_run(
         if stt_stream:
             stt_stream.stop()
 
-    return {"events": events, "conversation_id": None, "tts_duration": 0}
+    return {"events": events, "conversation_id": None, "tts_duration": 0, "wake_word_detected": wake_word_detected}
 
 
 def play_media(hass: HomeAssistant, entity_id: str, media_id: str, media_type: str):
@@ -314,21 +312,43 @@ def run_forever(
         _LOGGER.debug("Entering run_assist coroutine")
         conversation_id = None
         last_interaction_time = None
+        wake_word_needed = True  # Flag to determine if wake word detection is needed
+    
         while running and not stt_stream.closed:
             try:
                 _LOGGER.debug("Starting assist run")
                 current_time = time.time()
                 if last_interaction_time and current_time - last_interaction_time > 300:
-                    _LOGGER.debug("Resetting conversation ID due to inactivity")
+                    _LOGGER.debug("Resetting conversation due to inactivity")
                     conversation_id = None
+                    wake_word_needed = True
     
+                if wake_word_needed:
+                    _LOGGER.debug("Waiting for wake word")
+                    # Run pipeline with only wake word detection
+                    wake_word_result = await assist_run(
+                        hass,
+                        data,
+                        context=context,
+                        event_callback=event_callback,
+                        stt_stream=stt_stream,
+                        conversation_id=conversation_id,
+                        start_stage=PipelineStage.WAKE_WORD,
+                        end_stage=PipelineStage.WAKE_WORD
+                    )
+                    if not wake_word_result.get("wake_word_detected", False):
+                        continue  # If wake word not detected, continue waiting
+    
+                # Wake word detected or not needed, proceed with full pipeline
                 result = await assist_run(
                     hass,
                     data,
                     context=context,
                     event_callback=event_callback,
                     stt_stream=stt_stream,
-                    conversation_id=conversation_id
+                    conversation_id=conversation_id,
+                    start_stage=PipelineStage.STT,
+                    end_stage=PipelineStage.TTS
                 )
                 _LOGGER.debug(f"Assist run completed. Result: {result}")
                 new_conversation_id = result.get("conversation_id")
@@ -336,12 +356,16 @@ def run_forever(
                 if new_conversation_id:
                     conversation_id = new_conversation_id
                     last_interaction_time = current_time
-                _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
+                    wake_word_needed = False  # Don't need wake word for next iteration
+                else:
+                    # If no new conversation ID, assume interaction ended
+                    wake_word_needed = True
     
-                # Remove the extra wait here, as it's now handled in internal_event_callback
+                _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
     
             except Exception as e:
                 _LOGGER.exception(f"run_assist error: {e}")
+                wake_word_needed = True  # Reset to requiring wake word on error
                 await asyncio.sleep(1)
     
     _LOGGER.debug("Creating coroutines")
