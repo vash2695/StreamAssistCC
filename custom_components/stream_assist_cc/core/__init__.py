@@ -219,6 +219,9 @@ async def assist_run(
                 tts_duration = await get_tts_duration(hass, tts_url)
                 _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
+                # Stop the pipeline at the WAKE_WORD stage
+                _LOGGER.debug("Stopping pipeline at WAKE_WORD stage")
+                pipeline_run.stop(PipelineStage.WAKE_WORD)
                 # Wait for TTS playback to complete
                 await asyncio.sleep(tts_duration)
     
@@ -242,7 +245,6 @@ async def assist_run(
         wake_word_settings=new(WakeWordSettings, assist.get("wake_word_settings")),
         audio_settings=new(AudioSettings, assist.get("audio_settings")),
     )
-
     # 3. Setup Pipeline Input
     pipeline_input = PipelineInput(
         run=pipeline_run,
