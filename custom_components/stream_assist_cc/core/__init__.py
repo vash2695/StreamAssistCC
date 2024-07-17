@@ -300,7 +300,17 @@ def run_forever(
     tts_active = False  # Move this outside run_assist
 
     async def run_stream():
-        # ... (keep this function as is)
+        _LOGGER.debug("Entering run_stream coroutine")
+        while running and not stt_stream.closed:
+            try:
+                _LOGGER.debug("Attempting to run stream")
+                await stream_run(hass, data, stt_stream=stt_stream)
+                _LOGGER.debug("Stream run completed")
+            except Exception as e:
+                _LOGGER.error(f"run_stream error {type(e)}: {e}")
+            if running:
+                _LOGGER.debug("Waiting 30 seconds before next stream run")
+                await asyncio.sleep(30)
 
     async def run_assist():
         _LOGGER.debug("Entering run_assist coroutine")
