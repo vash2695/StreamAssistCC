@@ -125,7 +125,7 @@ async def assist_run(
     conversation_id: str | None = None,
     start_stage: PipelineStage = PipelineStage.WAKE_WORD
 ) -> dict:
-    _LOGGER.debug(f"assist_run called with conversation_id: {conversation_id}")
+    _LOGGER.debug(f"assist_run called with conversation_id: {conversation_id}, start_stage: {start_stage}")
     
     # 1. Process assist_pipeline settings
     assist = data.get("assist", {})
@@ -309,7 +309,7 @@ def run_forever(
         _LOGGER.debug("Entering run_assist coroutine")
         conversation_id = None
         last_interaction_time = None
-        waiting_for_tts = False
+        skip_wake_word = False
         
         while running and not stt_stream.closed:
             try:
@@ -318,31 +318,34 @@ def run_forever(
                 if last_interaction_time and current_time - last_interaction_time > 300:
                     _LOGGER.debug("Resetting conversation ID due to inactivity")
                     conversation_id = None
+                    skip_wake_word = False
     
-                if not waiting_for_tts:
-                    result = await assist_run(
-                        hass,
-                        data,
-                        context=context,
-                        event_callback=event_callback,
-                        stt_stream=stt_stream,
-                        conversation_id=conversation_id,
-                        start_stage=PipelineStage.WAKE_WORD if conversation_id is None else PipelineStage.STT
-                    )
-                    _LOGGER.debug(f"Assist run completed. Result: {result}")
-                    new_conversation_id = result.get("conversation_id")
-                    
-                    if new_conversation_id:
-                        conversation_id = new_conversation_id
-                        last_interaction_time = current_time
-                    _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
+                start_stage = PipelineStage.STT if skip_wake_word else PipelineStage.WAKE_WORD
     
-                    if result.get("tts_duration", 0) > 0:
-                        waiting_for_tts = True
-                        await asyncio.sleep(result["tts_duration"])
-                        waiting_for_tts = False
+                result = await assist_run(
+                    hass,
+                    data,
+                    context=context,
+                    event_callback=event_callback,
+                    stt_stream=stt_stream,
+                    conversation_id=conversation_id,
+                    start_stage=start_stage
+                )
+                _LOGGER.debug(f"Assist run completed. Result: {result}")
+                new_conversation_id = result.get("conversation_id")
+                
+                if new_conversation_id:
+                    conversation_id = new_conversation_id
+                    last_interaction_time = current_time
+                _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
+    
+                if result.get("tts_duration", 0) > 0:
+                    _LOGGER.debug(f"Waiting for TTS playback: {result['tts_duration']} seconds")
+                    await asyncio.sleep(result["tts_duration"])
+                    skip_wake_word = True
+                    _LOGGER.debug("TTS playback finished, skipping wake word for next interaction")
                 else:
-                    await asyncio.sleep(0.1)  # Short sleep to prevent busy-waiting
+                    skip_wake_word = False
     
             except Exception as e:
                 _LOGGER.exception(f"run_assist error: {e}")
