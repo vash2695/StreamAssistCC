@@ -193,7 +193,7 @@ async def assist_run(
         pipeline=pipeline,
         start_stage=assist["start_stage"],
         end_stage=assist["end_stage"],
-        event_callback=internal_event_callback,
+        event_callback=lambda event: asyncio.create_task(internal_event_callback(event)),
         tts_audio_output=assist.get("tts_audio_output"),
         wake_word_settings=WakeWordSettings(**assist.get("wake_word_settings", {})),
         audio_settings=AudioSettings(**assist.get("audio_settings", {})),
