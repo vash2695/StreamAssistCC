@@ -201,7 +201,7 @@ async def assist_run(
             stt_text = event.data.get("stt_output", {}).get("text", "").lower()
             # Check if the entire phrase matches any cancellation phrase
             if re.match(r'^(' + '|'.join(CANCELLATION_PHRASES) + r')$', stt_text.strip()):
-                _LOGGER.info(f"Cancellation phrase detected: {stt_text}")
+                _LOGGER.debug(f"Cancellation phrase detected: {stt_text}")
                 if player_entity_id and (media_id := data.get("cancellation_media")):
                     play_media(hass, player_entity_id, media_id, "music")
                 # Cancel the pipeline
