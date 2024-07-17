@@ -198,11 +198,11 @@ async def assist_run(
             if player_entity_id:
                 tts = event.data["tts_output"]
                 tts_url = tts["url"]
-                # Start playing media immediately
-                play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
-                # Calculate duration
                 tts_duration = await get_tts_duration(hass, tts_url)
                 _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
+                play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
+                # Wait for TTS playback to complete
+                await asyncio.sleep(tts_duration)
     
         if event_callback:
             if inspect.iscoroutinefunction(event_callback):
@@ -311,46 +311,38 @@ def run_forever(
                 await asyncio.sleep(30)
 
     async def run_assist():
-        _LOGGER.debug("Entering run_assist coroutine")
-        conversation_id = None
-        last_interaction_time = None
-        while running and not stt_stream.closed:
-            try:
-                _LOGGER.debug("Starting assist run")
-                current_time = time.time()
-                if last_interaction_time and current_time - last_interaction_time > 300:
-                    _LOGGER.debug("Resetting conversation ID due to inactivity")
-                    conversation_id = None
-    
-                result = await assist_run(
-                    hass,
-                    data,
-                    context=context,
-                    event_callback=event_callback,
-                    stt_stream=stt_stream,
-                    conversation_id=conversation_id
-                )
-                _LOGGER.debug(f"Assist run completed. Result: {result}")
-                new_conversation_id = result.get("conversation_id")
-                tts_duration = result.get("tts_duration", 0)
-                
-                if new_conversation_id:
-                    conversation_id = new_conversation_id
-                    last_interaction_time = current_time
-                _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
-    
-                # Wait for TTS playback to complete before next run
-                if tts_duration > 0:
-                    _LOGGER.debug(f"Waiting for {tts_duration} seconds before next interaction")
-                    await asyncio.sleep(tts_duration)
-                else:
-                    # If no TTS, wait for a short time before next run
-                    _LOGGER.debug("No TTS duration, waiting for 1 second before next run")
-                    await asyncio.sleep(1)
-    
-            except Exception as e:
-                _LOGGER.exception(f"run_assist error: {e}")
-                await asyncio.sleep(1)
+    _LOGGER.debug("Entering run_assist coroutine")
+    conversation_id = None
+    last_interaction_time = None
+    while running and not stt_stream.closed:
+        try:
+            _LOGGER.debug("Starting assist run")
+            current_time = time.time()
+            if last_interaction_time and current_time - last_interaction_time > 300:
+                _LOGGER.debug("Resetting conversation ID due to inactivity")
+                conversation_id = None
+
+            result = await assist_run(
+                hass,
+                data,
+                context=context,
+                event_callback=event_callback,
+                stt_stream=stt_stream,
+                conversation_id=conversation_id
+            )
+            _LOGGER.debug(f"Assist run completed. Result: {result}")
+            new_conversation_id = result.get("conversation_id")
+            
+            if new_conversation_id:
+                conversation_id = new_conversation_id
+                last_interaction_time = current_time
+            _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
+
+            # Remove the extra wait here, as it's now handled in internal_event_callback
+
+        except Exception as e:
+            _LOGGER.exception(f"run_assist error: {e}")
+            await asyncio.sleep(1)
     
     _LOGGER.debug("Creating coroutines")
     run_stream_task = hass.loop.create_task(run_stream(), name="stream_assist_cc_run_stream")
