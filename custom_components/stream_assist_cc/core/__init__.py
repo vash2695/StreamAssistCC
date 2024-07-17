@@ -149,7 +149,7 @@ async def assist_run(
     tts_url = None
     
     async def internal_event_callback(event: PipelineEvent):
-        nonlocal pipeline_run, tts_url
+        nonlocal pipeline_run, tts_url, tts_duration
         _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
     
         events[event.type] = (
@@ -160,26 +160,28 @@ async def assist_run(
     
         if event.type == PipelineEventType.STT_START:
             if player_entity_id and (media_id := data.get("stt_start_media")):
-                play_media(hass, player_entity_id, media_id, "music")
+                await play_media(hass, player_entity_id, media_id, "music")
         elif event.type == PipelineEventType.STT_END:
             stt_text = event.data.get("stt_output", {}).get("text", "").lower()
             
             if re.match(r'^(' + '|'.join(CANCELLATION_PHRASES) + r')$', stt_text.strip()):
                 _LOGGER.info(f"Cancellation phrase detected: {stt_text}")
                 if player_entity_id and (media_id := data.get("cancellation_media")):
-                    play_media(hass, player_entity_id, media_id, "music")
+                    await play_media(hass, player_entity_id, media_id, "music")
                 pipeline_run.stop(PipelineStage.STT)
             elif player_entity_id and (media_id := data.get("stt_end_media")):
-                play_media(hass, player_entity_id, media_id, "music")
+                await play_media(hass, player_entity_id, media_id, "music")
         elif event.type == PipelineEventType.ERROR:
             if event.data.get("code") == "stt-no-text-recognized":
                 if player_entity_id and (media_id := data.get("stt_error_media")):
-                    play_media(hass, player_entity_id, media_id, "music")
+                    await play_media(hass, player_entity_id, media_id, "music")
         elif event.type == PipelineEventType.TTS_END:
             if player_entity_id:
                 tts = event.data["tts_output"]
                 tts_url = tts["url"]
-                play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
+                tts_duration = await get_tts_duration(hass, tts_url)
+                _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
+                await play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
     
         if event_callback:
             if inspect.iscoroutinefunction(event_callback):
@@ -235,8 +237,8 @@ async def assist_run(
             result_conversation_id = intent_output.get('conversation_id')
 
         if tts_url:
-            tts_duration = await get_tts_duration(hass, tts_url)
-            _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
+            _LOGGER.debug(f"Waiting for TTS playback: {tts_duration} seconds")
+            await asyncio.sleep(tts_duration)
 
         return {
             "events": events, 
