@@ -131,24 +131,14 @@ async def assist_run(
     assist = data.get("assist", {})
 
     if pipeline_id := data.get("pipeline_id"):
-        # get pipeline from pipeline ID
         pipeline = assist_pipeline.async_get_pipeline(hass, pipeline_id)
     elif pipeline_json := assist.get("pipeline"):
-        # get pipeline from JSON
         pipeline = Pipeline.from_json(pipeline_json)
     else:
-        # get default pipeline
         pipeline = assist_pipeline.async_get_pipeline(hass)
 
-    if "start_stage" not in assist:
-        assist["start_stage"] = start_stage
-
-    if "end_stage" not in assist:
-        # auto select end stage
-        if pipeline.tts_engine:
-            assist["end_stage"] = PipelineStage.TTS
-        else:
-            assist["end_stage"] = PipelineStage.INTENT
+    assist["start_stage"] = start_stage
+    assist["end_stage"] = assist.get("end_stage", PipelineStage.TTS)
 
     player_entity_id = data.get("player_entity_id")
 
@@ -156,14 +146,10 @@ async def assist_run(
     events = {}
     pipeline_run = None
     tts_duration = 0
-    
-    async def calculate_tts_duration(tts_url):
-        nonlocal tts_duration
-        tts_duration = await get_tts_duration(hass, tts_url)
-        _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
+    tts_url = None
     
     async def internal_event_callback(event: PipelineEvent):
-        nonlocal pipeline_run, tts_duration
+        nonlocal pipeline_run, tts_url
         _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
     
         events[event.type] = (
@@ -193,11 +179,7 @@ async def assist_run(
             if player_entity_id:
                 tts = event.data["tts_output"]
                 tts_url = tts["url"]
-                tts_duration = await get_tts_duration(hass, tts_url)
-                _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
-                # Wait for TTS playback to complete
-                await asyncio.sleep(tts_duration)
     
         if event_callback:
             if inspect.iscoroutinefunction(event_callback):
@@ -205,19 +187,16 @@ async def assist_run(
             else:
                 event_callback(event)
 
-    def sync_event_callback(event: PipelineEvent):
-        asyncio.create_task(internal_event_callback(event))
-
     pipeline_run = PipelineRun(
         hass,
         context=context,
         pipeline=pipeline,
         start_stage=assist["start_stage"],
         end_stage=assist["end_stage"],
-        event_callback=sync_event_callback,
+        event_callback=internal_event_callback,
         tts_audio_output=assist.get("tts_audio_output"),
-        wake_word_settings=new(WakeWordSettings, assist.get("wake_word_settings")),
-        audio_settings=new(AudioSettings, assist.get("audio_settings")),
+        wake_word_settings=WakeWordSettings(**assist.get("wake_word_settings", {})),
+        audio_settings=AudioSettings(**assist.get("audio_settings", {})),
     )
 
     # 3. Setup Pipeline Input
@@ -255,7 +234,9 @@ async def assist_run(
             intent_output = events[PipelineEventType.INTENT_END].get('data', {}).get('intent_output', {})
             result_conversation_id = intent_output.get('conversation_id')
 
-        _LOGGER.debug(f"Pipeline execution completed. TTS duration: {tts_duration}")
+        if tts_url:
+            tts_duration = await get_tts_duration(hass, tts_url)
+            _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
 
         return {
             "events": events, 
@@ -313,7 +294,7 @@ def run_forever(
         
         while running and not stt_stream.closed:
             try:
-                _LOGGER.debug("Starting assist run")
+                _LOGGER.debug(f"Starting assist run. Skip wake word: {skip_wake_word}")
                 current_time = time.time()
                 if last_interaction_time and current_time - last_interaction_time > 300:
                     _LOGGER.debug("Resetting conversation ID due to inactivity")
@@ -339,13 +320,18 @@ def run_forever(
                     last_interaction_time = current_time
                 _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
     
-                if result.get("tts_duration", 0) > 0:
-                    _LOGGER.debug(f"Waiting for TTS playback: {result['tts_duration']} seconds")
-                    await asyncio.sleep(result["tts_duration"])
+                tts_duration = result.get("tts_duration", 0)
+                if tts_duration > 0:
+                    _LOGGER.debug(f"Waiting for TTS playback: {tts_duration} seconds")
+                    await asyncio.sleep(tts_duration)
                     skip_wake_word = True
                     _LOGGER.debug("TTS playback finished, skipping wake word for next interaction")
                 else:
                     skip_wake_word = False
+                    _LOGGER.debug("No TTS playback, wake word will be required for next interaction")
+    
+                # Add a small delay to ensure all events are processed
+                await asyncio.sleep(0.1)
     
             except Exception as e:
                 _LOGGER.exception(f"run_assist error: {e}")
