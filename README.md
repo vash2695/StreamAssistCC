@@ -21,4 +21,5 @@ Future goals:
    * This would require the integration to also provide updated area and device information
 * Expose more of the integration to automations
   * Example: A service call that allows you to select an integration entry and trigger the assistant pipeline at the intent phase with predefined data
-
+* Add cancel phrases like: "stop", "nevermind", "never mind", "thank you", "cancel that", "cancel",
+    "abort", "quit", "exit", "end", "forget it", "that's all", "that is all"
