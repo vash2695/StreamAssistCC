@@ -254,7 +254,7 @@ async def assist_run(
         # 6. Run Pipeline
         await pipeline_input.execute()
 
-         _LOGGER.debug(f"Pipeline execution completed. TTS duration: {tts_duration}")
+        _LOGGER.debug(f"Pipeline execution completed. TTS duration: {tts_duration}")
 
         return {
             "events": events, 
