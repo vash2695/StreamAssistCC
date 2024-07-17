@@ -324,10 +324,8 @@ def run_forever(
     
                 tts_duration = result.get("tts_duration", 0)
                 if tts_duration > 0:
-                    _LOGGER.debug(f"Waiting for TTS playback: {tts_duration} seconds")
-                    await asyncio.sleep(tts_duration)
+                    _LOGGER.debug(f"TTS playback finished, skipping wake word for next interaction")
                     skip_wake_word = True
-                    _LOGGER.debug("TTS playback finished, skipping wake word for next interaction")
                 else:
                     skip_wake_word = False
                     _LOGGER.debug("No TTS playback, wake word will be required for next interaction")
