@@ -317,7 +317,7 @@ def run_forever(
         conversation_id = None
         last_interaction_time = None
         nonlocal tts_active
-
+    
         async def custom_event_callback(event: PipelineEvent):
             nonlocal tts_active
             _LOGGER.debug(f"Event in custom_event_callback: {event.type}")
@@ -334,7 +334,7 @@ def run_forever(
                     await event_callback(event)
                 else:
                     event_callback(event)
-
+    
         while running and not stt_stream.closed:
             try:
                 _LOGGER.debug(f"Starting assist run. TTS active: {tts_active}")
@@ -343,7 +343,7 @@ def run_forever(
                     _LOGGER.debug("Resetting conversation ID due to inactivity")
                     conversation_id = None
                     tts_active = False  # Reset TTS active state after inactivity
-
+    
                 # Determine the start stage based on TTS activity
                 assist = data.get("assist", {}).copy()
                 original_start_stage = assist.get("start_stage")
@@ -352,7 +352,7 @@ def run_forever(
                     _LOGGER.debug("TTS active, skipping wake word and starting from STT")
                 else:
                     _LOGGER.debug(f"Starting from stage: {original_start_stage}")
-
+    
                 result = await assist_run(
                     hass,
                     {**data, "assist": assist},
@@ -368,7 +368,15 @@ def run_forever(
                     conversation_id = new_conversation_id
                     last_interaction_time = current_time
                 _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
-
+    
+                # Wait for TTS to complete before starting the next iteration
+                tts_duration = result.get("tts_duration", 0)
+                if tts_duration > 0:
+                    _LOGGER.debug(f"Waiting for TTS to complete: {tts_duration} seconds")
+                    await asyncio.sleep(tts_duration)
+                    tts_active = False
+                    _LOGGER.debug("TTS active set to False after waiting")
+    
             except Exception as e:
                 _LOGGER.exception(f"run_assist error: {e}")
                 await asyncio.sleep(1)
