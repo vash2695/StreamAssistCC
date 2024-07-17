@@ -177,7 +177,6 @@ async def assist_run(
     events = {}
     pipeline_run = None
     tts_duration = 0
-    skip_next_wake = False
 
     async def calculate_tts_duration(tts_url):
         nonlocal tts_duration
@@ -185,7 +184,7 @@ async def assist_run(
         _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
     
     async def internal_event_callback(event: PipelineEvent):
-        nonlocal pipeline_run, tts_duration, skip_next_wake
+        nonlocal pipeline_run, tts_duration
         _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
     
         events[event.type] = (
