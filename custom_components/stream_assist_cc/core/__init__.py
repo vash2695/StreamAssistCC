@@ -130,17 +130,13 @@ async def assist_run(
     assist = data.get("assist", {})
 
     if pipeline_id := data.get("pipeline_id"):
-        # get pipeline from pipeline ID
         pipeline = assist_pipeline.async_get_pipeline(hass, pipeline_id)
     elif pipeline_json := assist.get("pipeline"):
-        # get pipeline from JSON
         pipeline = Pipeline.from_json(pipeline_json)
     else:
-        # get default pipeline
         pipeline = assist_pipeline.async_get_pipeline(hass)
 
     if "start_stage" not in assist:
-        # auto select start stage
         if pipeline.wake_word_entity:
             assist["start_stage"] = PipelineStage.WAKE_WORD
         elif pipeline.stt_engine:
@@ -149,7 +145,6 @@ async def assist_run(
             raise Exception("Unknown start_stage")
 
     if "end_stage" not in assist:
-        # auto select end stage
         if pipeline.tts_engine:
             assist["end_stage"] = PipelineStage.TTS
         else:
@@ -163,13 +158,8 @@ async def assist_run(
     tts_duration = 0
     skip_next_wake = False
     
-    async def calculate_tts_duration(tts_url):
-        nonlocal tts_duration
-        tts_duration = await get_tts_duration(hass, tts_url)
-        _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
-    
     async def internal_event_callback(event: PipelineEvent):
-        nonlocal pipeline_run, tts_duration
+        nonlocal pipeline_run, tts_duration, skip_next_wake
         _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
     
         events[event.type] = (
@@ -178,17 +168,25 @@ async def assist_run(
             else {"timestamp": event.timestamp}
         )
     
-        if event.type == PipelineEventType.STT_START:
+        if event.type == PipelineEventType.TTS_START:
+            skip_next_wake = True
+            _LOGGER.debug("skip_next_wake set to True")
+            if 'tts_input' in event.data:
+                tts_input = event.data['tts_input']
+                tts_url = f"/api/tts_proxy/{hashlib.md5(tts_input.encode()).hexdigest()}.mp3"
+                tts_duration = await get_tts_duration(hass, tts_url)
+                _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
+        elif event.type == PipelineEventType.STT_START:
+            skip_next_wake = False
+            _LOGGER.debug("skip_next_wake set to False")
             if player_entity_id and (media_id := data.get("stt_start_media")):
                 play_media(hass, player_entity_id, media_id, "music")
         elif event.type == PipelineEventType.STT_END:
             stt_text = event.data.get("stt_output", {}).get("text", "").lower()
-            # Check if the entire phrase matches any cancellation phrase
             if re.match(r'^(' + '|'.join(CANCELLATION_PHRASES) + r')$', stt_text.strip()):
                 _LOGGER.info(f"Cancellation phrase detected: {stt_text}")
                 if player_entity_id and (media_id := data.get("cancellation_media")):
                     play_media(hass, player_entity_id, media_id, "music")
-                # Cancel the pipeline
                 pipeline_run.stop(PipelineStage.STT)
             elif player_entity_id and (media_id := data.get("stt_end_media")):
                 play_media(hass, player_entity_id, media_id, "music")
@@ -200,11 +198,11 @@ async def assist_run(
             if player_entity_id:
                 tts = event.data["tts_output"]
                 tts_url = tts["url"]
-                tts_duration = await get_tts_duration(hass, tts_url)
-                _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
-                # Wait for TTS playback to complete
-                await asyncio.sleep(tts_duration)
+        elif event.type == PipelineEventType.RUN_START and skip_next_wake:
+            if pipeline_run.start_stage == PipelineStage.WAKE_WORD:
+                pipeline_run.start_stage = PipelineStage.STT
+                _LOGGER.debug("Skipping wake word and starting from STT")
     
         if event_callback:
             if inspect.iscoroutinefunction(event_callback):
@@ -246,17 +244,11 @@ async def assist_run(
     )
 
     try:
-        # 4. Validate Pipeline
         await pipeline_input.validate()
-
-        # 5. Run Stream (optional)
         if stt_stream:
             stt_stream.start()
-
-        # 6. Run Pipeline
         await pipeline_input.execute()
 
-        # Extract conversation_id from the INTENT_END event
         result_conversation_id = None
         if PipelineEventType.INTENT_END in events:
             intent_output = events[PipelineEventType.INTENT_END].get('data', {}).get('intent_output', {})
