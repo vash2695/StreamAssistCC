@@ -127,7 +127,7 @@ async def assist_run(
     end_stage: PipelineStage = PipelineStage.TTS
 ) -> dict:
     _LOGGER.debug(f"assist_run called with conversation_id: {conversation_id}, start_stage: {start_stage}, end_stage: {end_stage}")
-     
+    
     # 1. Process assist_pipeline settings
     assist = data.get("assist", {})
 
@@ -159,9 +159,10 @@ async def assist_run(
     pipeline_run = None
     tts_duration = 0
     wake_word_detected = False
-    
+    result_conversation_id = None
+
     async def internal_event_callback(event: PipelineEvent):
-        nonlocal pipeline_run, tts_duration, wake_word_detected
+        nonlocal pipeline_run, tts_duration, wake_word_detected, result_conversation_id
         _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
     
         events[event.type] = (
@@ -185,6 +186,10 @@ async def assist_run(
                 pipeline_run.stop(PipelineStage.STT)
             elif player_entity_id and (media_id := data.get("stt_end_media")):
                 play_media(hass, player_entity_id, media_id, "music")
+        elif event.type == PipelineEventType.INTENT_END:
+            intent_output = event.data.get('intent_output', {})
+            result_conversation_id = intent_output.get('conversation_id')
+            _LOGGER.debug(f"Extracted conversation ID: {result_conversation_id}")
         elif event.type == PipelineEventType.ERROR:
             if event.data.get("code") == "stt-no-text-recognized":
                 if player_entity_id and (media_id := data.get("stt_error_media")):
@@ -204,10 +209,10 @@ async def assist_run(
                 await event_callback(event)
             else:
                 event_callback(event)
-    
+
     def sync_event_callback(event: PipelineEvent):
         asyncio.create_task(internal_event_callback(event))
-    
+
     pipeline_run = PipelineRun(
         hass,
         context=context,
@@ -249,13 +254,7 @@ async def assist_run(
         # 6. Run Pipeline
         await pipeline_input.execute()
 
-        # Extract conversation_id from the INTENT_END event
-        result_conversation_id = None
-        if PipelineEventType.INTENT_END in events:
-            intent_output = events[PipelineEventType.INTENT_END].get('data', {}).get('intent_output', {})
-            result_conversation_id = intent_output.get('conversation_id')
-
-        _LOGGER.debug(f"Pipeline execution completed. TTS duration: {tts_duration}")
+         _LOGGER.debug(f"Pipeline execution completed. TTS duration: {tts_duration}")
 
         return {
             "events": events, 
@@ -270,12 +269,7 @@ async def assist_run(
         if stt_stream:
             stt_stream.stop()
 
-    return {
-        "events": events, 
-        "conversation_id": result_conversation_id,
-        "tts_duration": tts_duration,
-        "wake_word_detected": wake_word_detected
-    }
+    return {"events": events, "conversation_id": None, "tts_duration": 0, "wake_word_detected": wake_word_detected}
 
 
 def play_media(hass: HomeAssistant, entity_id: str, media_id: str, media_type: str):
@@ -341,8 +335,8 @@ def run_forever(
                     if not wake_word_result.get("wake_word_detected", False):
                         await asyncio.sleep(0.1)  # Short sleep to prevent tight loop
                         continue
+                    _LOGGER.debug("Wake word detected, proceeding with full pipeline")
     
-                _LOGGER.debug("Wake word detected or not needed, proceeding with full pipeline")
                 result = await assist_run(
                     hass,
                     data,
