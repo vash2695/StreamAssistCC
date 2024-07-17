@@ -317,16 +317,20 @@ def run_forever(
         conversation_id = None
         last_interaction_time = None
         nonlocal tts_active
+        tts_finished = asyncio.Event()
+        tts_finished.set()  # Initially set to True
     
         async def custom_event_callback(event: PipelineEvent):
             nonlocal tts_active
             _LOGGER.debug(f"Event in custom_event_callback: {event.type}")
             if event.type == PipelineEventType.TTS_START:
                 tts_active = True
+                tts_finished.clear()
                 _LOGGER.debug("TTS active set to True")
             elif event.type == PipelineEventType.TTS_END:
-                tts_active = False
-                _LOGGER.debug("TTS active set to False")
+                _LOGGER.debug("TTS_END event received, waiting for playback to complete")
+            elif event.type == PipelineEventType.RUN_END:
+                _LOGGER.debug("RUN_END event received")
             
             # Call the original event_callback
             if event_callback:
@@ -337,6 +341,9 @@ def run_forever(
     
         while running and not stt_stream.closed:
             try:
+                # Wait for the previous TTS to finish before starting a new run
+                await tts_finished.wait()
+                
                 _LOGGER.debug(f"Starting assist run. TTS active: {tts_active}")
                 current_time = time.time()
                 if last_interaction_time and current_time - last_interaction_time > 300:
@@ -376,10 +383,13 @@ def run_forever(
                     await asyncio.sleep(tts_duration)
                     tts_active = False
                     _LOGGER.debug("TTS active set to False after waiting")
+                
+                tts_finished.set()  # Signal that TTS is finished
     
             except Exception as e:
                 _LOGGER.exception(f"run_assist error: {e}")
                 await asyncio.sleep(1)
+                tts_finished.set()  # Ensure the event is set even if there's an error
 
     _LOGGER.debug("Creating coroutines")
     run_stream_task = hass.loop.create_task(run_stream(), name="stream_assist_cc_run_stream")
