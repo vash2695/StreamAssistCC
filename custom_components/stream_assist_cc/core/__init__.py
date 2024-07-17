@@ -188,52 +188,30 @@ async def assist_run(
             else {"timestamp": event.timestamp}
         )
     
-        if event.type == PipelineEventType.STT_START:
-            if player_entity_id and (media_id := data.get("stt_start_media")):
-                play_media(hass, player_entity_id, media_id, "music")
-        elif event.type == PipelineEventType.STT_END:
+        if event.type == PipelineEventType.STT_END:
             stt_text = event.data.get("stt_output", {}).get("text", "").lower()
             # Check if the entire phrase matches any cancellation phrase
             if re.match(r'^(' + '|'.join(CANCELLATION_PHRASES) + r')$', stt_text.strip()):
                 _LOGGER.debug(f"Cancellation phrase detected: {stt_text}")
                 if player_entity_id and (media_id := data.get("cancellation_media")):
                     play_media(hass, player_entity_id, media_id, "music")
-                # Debug information
-                _LOGGER.debug(f"PipelineRun attributes: {dir(pipeline_run)}")
-                _LOGGER.debug(f"PipelineRun type: {type(pipeline_run)}")
-                # Cancel the pipeline
-                try:
-                    pipeline_run.stop(PipelineStage.STT)
-                except AttributeError:
-                    _LOGGER.error("AttributeError: 'stop' method not found on pipeline_run")
-                except Exception as e:
-                    _LOGGER.error(f"Error stopping pipeline: {str(e)}")
+                # End the pipeline run
+                _LOGGER.debug("Ending pipeline run due to cancellation phrase")
+                await pipeline_run.end()
             elif player_entity_id and (media_id := data.get("stt_end_media")):
                 play_media(hass, player_entity_id, media_id, "music")
-        elif event.type == PipelineEventType.ERROR:
-            if event.data.get("code") == "stt-no-text-recognized":
-                if player_entity_id and (media_id := data.get("stt_error_media")):
-                    play_media(hass, player_entity_id, media_id, "music")
         elif event.type == PipelineEventType.TTS_END:
             if player_entity_id:
                 tts = event.data["tts_output"]
                 tts_url = tts["url"]
                 tts_duration = await get_tts_duration(hass, tts_url)
+                _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
-                # Debug information
-                _LOGGER.debug(f"PipelineRun attributes: {dir(pipeline_run)}")
-                _LOGGER.debug(f"PipelineRun type: {type(pipeline_run)}")
-                # Stop the pipeline at the WAKE_WORD stage
-                _LOGGER.debug("Attempting to stop pipeline at WAKE_WORD stage")
-                try:
-                    pipeline_run.stop(PipelineStage.WAKE_WORD)
-                    _LOGGER.debug("Successfully stopped pipeline at WAKE_WORD stage")
-                except AttributeError:
-                    _LOGGER.error("AttributeError: 'stop' method not found on pipeline_run")
-                except Exception as e:
-                    _LOGGER.error(f"Error stopping pipeline: {str(e)}")
                 # Wait for TTS playback to complete
                 await asyncio.sleep(tts_duration)
+                # End the pipeline run after TTS playback
+                _LOGGER.debug("Ending pipeline run after TTS playback")
+                await pipeline_run.end()
     
         if event_callback:
             if inspect.iscoroutinefunction(event_callback):
