@@ -178,7 +178,6 @@ async def assist_run(
     pipeline_run = None
     tts_duration = 0
     skip_next_wake = False
-    delayed_run_start_event = None
 
     async def calculate_tts_duration(tts_url):
         nonlocal tts_duration
@@ -186,13 +185,9 @@ async def assist_run(
         _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
     
     async def internal_event_callback(event: PipelineEvent):
-        nonlocal pipeline_run, tts_duration, skip_next_wake, delayed_run_start_event
+        nonlocal pipeline_run, tts_duration, skip_next_wake
         _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
     
-        if event.type == PipelineEventType.RUN_START:
-            delayed_run_start_event = event
-            return  # Don't process run-start event immediately
-
         events[event.type] = (
             {"data": event.data, "timestamp": event.timestamp}
             if event.data
@@ -226,18 +221,6 @@ async def assist_run(
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
                 # Wait for TTS playback to complete
                 await asyncio.sleep(tts_duration)
-                
-                # Process the delayed run-start event after TTS playback
-                if delayed_run_start_event:
-                    events[delayed_run_start_event.type] = {
-                        "data": delayed_run_start_event.data,
-                        "timestamp": delayed_run_start_event.timestamp
-                    }
-                    if event_callback:
-                        if inspect.iscoroutinefunction(event_callback):
-                            await event_callback(delayed_run_start_event)
-                        else:
-                            event_callback(delayed_run_start_event)
     
         if event_callback:
             if inspect.iscoroutinefunction(event_callback):
