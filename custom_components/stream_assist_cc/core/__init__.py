@@ -161,6 +161,7 @@ async def assist_run(
     events = {}
     pipeline_run = None
     tts_duration = 0
+    skip_next_wake = False
     
     async def calculate_tts_duration(tts_url):
         nonlocal tts_duration
@@ -297,7 +298,6 @@ def run_forever(
     _LOGGER.debug("Entering run_forever function")
     stt_stream = Stream()
     running = True
-    tts_active = False  # Move this outside run_assist
 
     async def run_stream():
         _LOGGER.debug("Entering run_stream coroutine")
@@ -316,55 +316,20 @@ def run_forever(
         _LOGGER.debug("Entering run_assist coroutine")
         conversation_id = None
         last_interaction_time = None
-        nonlocal tts_active
-        tts_finished = asyncio.Event()
-        tts_finished.set()  # Initially set to True
-    
-        async def custom_event_callback(event: PipelineEvent):
-            nonlocal tts_active
-            _LOGGER.debug(f"Event in custom_event_callback: {event.type}")
-            if event.type == PipelineEventType.TTS_START:
-                tts_active = True
-                tts_finished.clear()
-                _LOGGER.debug("TTS active set to True")
-            elif event.type == PipelineEventType.TTS_END:
-                _LOGGER.debug("TTS_END event received, waiting for playback to complete")
-            elif event.type == PipelineEventType.RUN_END:
-                _LOGGER.debug("RUN_END event received")
-            
-            # Call the original event_callback
-            if event_callback:
-                if inspect.iscoroutinefunction(event_callback):
-                    await event_callback(event)
-                else:
-                    event_callback(event)
-    
+
         while running and not stt_stream.closed:
             try:
-                # Wait for the previous TTS to finish before starting a new run
-                await tts_finished.wait()
-                
-                _LOGGER.debug(f"Starting assist run. TTS active: {tts_active}")
+                _LOGGER.debug("Starting assist run")
                 current_time = time.time()
                 if last_interaction_time and current_time - last_interaction_time > 300:
                     _LOGGER.debug("Resetting conversation ID due to inactivity")
                     conversation_id = None
-                    tts_active = False  # Reset TTS active state after inactivity
-    
-                # Determine the start stage based on TTS activity
-                assist = data.get("assist", {}).copy()
-                original_start_stage = assist.get("start_stage")
-                if tts_active and original_start_stage == PipelineStage.WAKE_WORD:
-                    assist["start_stage"] = PipelineStage.STT
-                    _LOGGER.debug("TTS active, skipping wake word and starting from STT")
-                else:
-                    _LOGGER.debug(f"Starting from stage: {original_start_stage}")
-    
+
                 result = await assist_run(
                     hass,
-                    {**data, "assist": assist},
+                    data,
                     context=context,
-                    event_callback=custom_event_callback,
+                    event_callback=event_callback,
                     stt_stream=stt_stream,
                     conversation_id=conversation_id
                 )
@@ -375,21 +340,16 @@ def run_forever(
                     conversation_id = new_conversation_id
                     last_interaction_time = current_time
                 _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
-    
+
                 # Wait for TTS to complete before starting the next iteration
                 tts_duration = result.get("tts_duration", 0)
                 if tts_duration > 0:
                     _LOGGER.debug(f"Waiting for TTS to complete: {tts_duration} seconds")
                     await asyncio.sleep(tts_duration)
-                    tts_active = False
-                    _LOGGER.debug("TTS active set to False after waiting")
-                
-                tts_finished.set()  # Signal that TTS is finished
-    
+
             except Exception as e:
                 _LOGGER.exception(f"run_assist error: {e}")
                 await asyncio.sleep(1)
-                tts_finished.set()  # Ensure the event is set even if there's an error
 
     _LOGGER.debug("Creating coroutines")
     run_stream_task = hass.loop.create_task(run_stream(), name="stream_assist_cc_run_stream")
