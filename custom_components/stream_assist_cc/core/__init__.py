@@ -182,11 +182,12 @@ async def assist_run(
                 play_media(hass, player_entity_id, media_id, "music")
         elif event.type == PipelineEventType.STT_END:
             stt_text = event.data.get("stt_output", {}).get("text", "").lower()
-            
+            # Check if the entire phrase matches any cancellation phrase
             if re.match(r'^(' + '|'.join(CANCELLATION_PHRASES) + r')$', stt_text.strip()):
                 _LOGGER.info(f"Cancellation phrase detected: {stt_text}")
                 if player_entity_id and (media_id := data.get("cancellation_media")):
                     play_media(hass, player_entity_id, media_id, "music")
+                # Cancel the pipeline
                 pipeline_run.stop(PipelineStage.STT)
             elif player_entity_id and (media_id := data.get("stt_end_media")):
                 play_media(hass, player_entity_id, media_id, "music")
