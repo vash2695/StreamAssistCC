@@ -127,7 +127,7 @@ async def assist_run(
     end_stage: PipelineStage = PipelineStage.TTS
 ) -> dict:
     _LOGGER.debug(f"assist_run called with conversation_id: {conversation_id}, start_stage: {start_stage}, end_stage: {end_stage}")
-    
+     
     # 1. Process assist_pipeline settings
     assist = data.get("assist", {})
 
@@ -172,8 +172,6 @@ async def assist_run(
     
         if event.type == PipelineEventType.WAKE_WORD_END:
             wake_word_detected = True
-            if player_entity_id and (media_id := data.get("wake_word_end_media")):
-                play_media(hass, player_entity_id, media_id, "music")
         elif event.type == PipelineEventType.STT_START:
             if player_entity_id and (media_id := data.get("stt_start_media")):
                 play_media(hass, player_entity_id, media_id, "music")
@@ -206,17 +204,17 @@ async def assist_run(
                 await event_callback(event)
             else:
                 event_callback(event)
-
+    
     def sync_event_callback(event: PipelineEvent):
         asyncio.create_task(internal_event_callback(event))
-
+    
     pipeline_run = PipelineRun(
         hass,
         context=context,
         pipeline=pipeline,
         start_stage=start_stage,
         end_stage=end_stage,
-        event_callback=internal_event_callback,
+        event_callback=sync_event_callback,
         tts_audio_output=assist.get("tts_audio_output"),
         wake_word_settings=new(WakeWordSettings, assist.get("wake_word_settings")),
         audio_settings=new(AudioSettings, assist.get("audio_settings")),
@@ -272,7 +270,12 @@ async def assist_run(
         if stt_stream:
             stt_stream.stop()
 
-    return {"events": events, "conversation_id": None, "tts_duration": 0, "wake_word_detected": wake_word_detected}
+    return {
+        "events": events, 
+        "conversation_id": result_conversation_id,
+        "tts_duration": tts_duration,
+        "wake_word_detected": wake_word_detected
+    }
 
 
 def play_media(hass: HomeAssistant, entity_id: str, media_id: str, media_type: str):
@@ -312,7 +315,7 @@ def run_forever(
         _LOGGER.debug("Entering run_assist coroutine")
         conversation_id = None
         last_interaction_time = None
-        wake_word_needed = True  # Flag to determine if wake word detection is needed
+        wake_word_needed = True
     
         while running and not stt_stream.closed:
             try:
@@ -325,7 +328,6 @@ def run_forever(
     
                 if wake_word_needed:
                     _LOGGER.debug("Waiting for wake word")
-                    # Run pipeline with only wake word detection
                     wake_word_result = await assist_run(
                         hass,
                         data,
@@ -337,9 +339,10 @@ def run_forever(
                         end_stage=PipelineStage.WAKE_WORD
                     )
                     if not wake_word_result.get("wake_word_detected", False):
-                        continue  # If wake word not detected, continue waiting
+                        await asyncio.sleep(0.1)  # Short sleep to prevent tight loop
+                        continue
     
-                # Wake word detected or not needed, proceed with full pipeline
+                _LOGGER.debug("Wake word detected or not needed, proceeding with full pipeline")
                 result = await assist_run(
                     hass,
                     data,
