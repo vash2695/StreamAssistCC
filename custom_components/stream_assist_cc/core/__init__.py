@@ -346,17 +346,3 @@ def run_forever(
     # Schedule the coroutines as background tasks
     hass.loop.create_task(run_stream_coro, name="stream_assist_cc_run_stream")
     hass.loop.create_task(run_assist_coro, name="stream_assist_cc_run_assist")
-
-    return stt_stream.close
-
-    def close():
-        nonlocal running
-        _LOGGER.debug("Closing stream_assist_cc tasks")
-        running = False
-        if not stt_stream.closed:
-            stt_stream.close()
-        run_stream_task.cancel()
-        run_assist_task.cancel()
-
-    _LOGGER.debug("run_forever function completed, returning close function")
-    return close
