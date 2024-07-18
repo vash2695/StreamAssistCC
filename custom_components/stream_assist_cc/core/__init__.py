@@ -170,7 +170,7 @@ async def assist_run(
     pipeline_run = None  # Define pipeline_run before the internal_event_callback
     tts_duration = 0
 
-    async def internal_event_callback(event: PipelineEvent):
+    def internal_event_callback(event: PipelineEvent):
         nonlocal pipeline_run, tts_duration
         _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
 
@@ -202,14 +202,11 @@ async def assist_run(
             if player_entity_id:
                 tts = event.data["tts_output"]
                 tts_url = tts["url"]
-                tts_duration = await calculate_tts_duration(hass, tts_url)
+                tts_duration = asyncio.run(calculate_tts_duration(hass, tts_url))
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
 
         if event_callback:
-            if inspect.iscoroutinefunction(event_callback):
-                await event_callback(event)
-            else:
-                event_callback(event)
+            event_callback(event)
 
     pipeline_run = PipelineRun(
         hass,
