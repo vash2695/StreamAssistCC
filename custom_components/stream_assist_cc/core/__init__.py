@@ -165,7 +165,7 @@ async def assist_run(
     tts_duration = 0
 
     def internal_event_callback(event: PipelineEvent):
-        nonlocal pipeline_run, tts_duration
+        nonlocal pipeline_run
         _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
 
         events[event.type] = (
