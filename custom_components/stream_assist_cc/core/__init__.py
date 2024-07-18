@@ -208,7 +208,13 @@ async def assist_run(
                 await asyncio.sleep(tts_duration)
 
         if event_callback:
-            event_callback(event)
+            if inspect.iscoroutinefunction(event_callback):
+                await event_callback(event)
+            else:
+                event_callback(event)
+
+    def sync_event_callback(event: PipelineEvent):
+        asyncio.create_task(internal_event_callback(event))
 
     pipeline_run = PipelineRun(
         hass,
