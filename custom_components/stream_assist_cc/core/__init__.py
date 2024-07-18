@@ -340,5 +340,5 @@ def run_forever(
 def new(cls, kwargs: dict):
     if not kwargs:
         return cls()
-    kwargs are {k: v for k, v in kwargs.items() if hasattr(cls, k)}
+    kwargs = {k: v for k, v in kwargs.items() if hasattr(cls, k)}
     return cls(**kwargs)
