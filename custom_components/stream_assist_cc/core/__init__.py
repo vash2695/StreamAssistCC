@@ -303,23 +303,22 @@ def run_forever(
 
     async def run_stream():
         _LOGGER.debug("Entering run_stream coroutine")
-        while running and not stt_stream.closed:
+        while not stt_stream.closed:
             try:
                 _LOGGER.debug("Attempting to run stream")
                 await stream_run(hass, data, stt_stream=stt_stream)
                 _LOGGER.debug("Stream run completed")
             except Exception as e:
                 _LOGGER.error(f"run_stream error {type(e)}: {e}")
-            if running:
                 _LOGGER.debug("Waiting 30 seconds before next stream run")
-                await asyncio.sleep(30)
+            await asyncio.sleep(30)
 
     async def run_assist():
         _LOGGER.debug("Entering run_assist coroutine")
         conversation_id = None
         last_interaction_time = None
         
-        while running and not stt_stream.closed:
+        while not stt_stream.closed:
             try:
                 _LOGGER.debug("Starting assist run")
                 current_time = time.time()
@@ -354,9 +353,6 @@ def run_forever(
     run_assist_task = hass.loop.create_task(run_assist(), name="stream_assist_cc_run_assist")
 
     def close():
-        nonlocal running
-        _LOGGER.debug("Closing stream_assist_cc tasks")
-        running = False
         if not stt_stream.closed:
             stt_stream.close()
         run_stream_task.cancel()
