@@ -287,7 +287,7 @@ async def assist_run(
         if stt_stream:
             stt_stream.stop()
 
-    return {"events": events, "conversation_id": None, "tts_duration": 0}
+    return {"events": events, "conversation_id": conversation_id, "tts_duration": 0}
 
 
 def run_forever(
