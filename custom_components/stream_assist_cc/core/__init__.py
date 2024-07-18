@@ -116,7 +116,13 @@ async def get_tts_duration(hass: HomeAssistant, tts_url: str) -> float:
     except Exception as e:
         _LOGGER.error(f"Error getting TTS duration: {e}")
         return 0
-        
+
+
+async def calculate_tts_duration(hass: HomeAssistant, tts_url: str):
+    tts_duration = await get_tts_duration(hass, tts_url)
+    _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
+    return tts_duration
+
 
 async def assist_run(
     hass: HomeAssistant,
@@ -197,7 +203,7 @@ async def assist_run(
                 tts = event.data["tts_output"]
                 tts_url = tts["url"]
                 # Schedule an async task to calculate the TTS duration
-                hass.loop.create_task(calculate_tts_duration(tts_url))
+                hass.loop.create_task(calculate_tts_duration(hass, tts_url))
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
 
         if event_callback:
@@ -334,5 +340,5 @@ def run_forever(
 def new(cls, kwargs: dict):
     if not kwargs:
         return cls()
-    kwargs = {k: v for k, v in kwargs.items() if hasattr(cls, k)}
+    kwargs are {k: v for k, v in kwargs.items() if hasattr(cls, k)}
     return cls(**kwargs)
