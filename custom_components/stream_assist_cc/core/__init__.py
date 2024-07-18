@@ -299,6 +299,12 @@ def run_forever(
     async def run_assist():
         conversation_id = None
         last_interaction_time = None
+        
+        async def calculate_tts_duration(tts_url):
+            nonlocal tts_duration
+            tts_duration = await get_tts_duration(hass, tts_url)
+            _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
+            
         while not stt_stream.closed:
             try:
                 current_time = time.time()
