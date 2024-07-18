@@ -271,6 +271,7 @@ async def assist_run(
         if PipelineEventType.INTENT_END in events:
             intent_output = events[PipelineEventType.INTENT_END].get('data', {}).get('intent_output', {})
             result_conversation_id = intent_output.get('conversation_id')
+            _LOGGER.debug(f"New conversation ID from intent: {result_conversation_id}")
 
         _LOGGER.debug(f"Pipeline execution completed. TTS duration: {tts_duration}")
 
@@ -313,43 +314,46 @@ def run_forever(
                 await asyncio.sleep(30)
 
     async def run_assist():
-        _LOGGER.debug("Entering run_assist coroutine")
-        conversation_id = None
-        last_interaction_time = None
+    _LOGGER.debug("Entering run_assist coroutine")
+    conversation_id = None
+    last_interaction_time = None
 
-        while running and not stt_stream.closed:
-            try:
-                _LOGGER.debug("Starting assist run")
-                current_time = time.time()
-                if last_interaction_time and current_time - last_interaction_time > 300:
-                    _LOGGER.debug("Resetting conversation ID due to inactivity")
-                    conversation_id = None
+    while running and not stt_stream.closed:
+        try:
+            _LOGGER.debug("Starting assist run")
+            current_time = time.time()
+            if last_interaction_time and current_time - last_interaction_time > 300:
+                _LOGGER.debug("Resetting conversation ID due to inactivity")
+                conversation_id = None
 
-                result = await assist_run(
-                    hass,
-                    data,
-                    context=context,
-                    event_callback=event_callback,
-                    stt_stream=stt_stream,
-                    conversation_id=conversation_id
-                )
-                _LOGGER.debug(f"Assist run completed. Result: {result}")
-                new_conversation_id = result.get("conversation_id")
-                
-                if new_conversation_id:
-                    conversation_id = new_conversation_id
-                    last_interaction_time = current_time
+            _LOGGER.debug(f"Using conversation ID: {conversation_id}")
+            result = await assist_run(
+                hass,
+                data,
+                context=context,
+                event_callback=event_callback,
+                stt_stream=stt_stream,
+                conversation_id=conversation_id
+            )
+            _LOGGER.debug(f"Assist run completed. Result: {result}")
+            new_conversation_id = result.get("conversation_id")
+            
+            if new_conversation_id:
+                conversation_id = new_conversation_id
+                last_interaction_time = current_time
                 _LOGGER.debug(f"Updated Conversation ID: {conversation_id}")
+            else:
+                _LOGGER.debug("No new conversation ID received")
 
-                # Wait for TTS to complete before starting the next iteration
-                tts_duration = result.get("tts_duration", 0)
-                if tts_duration > 0:
-                    _LOGGER.debug(f"Waiting for TTS to complete: {tts_duration} seconds")
-                    await asyncio.sleep(tts_duration)
+            # Wait for TTS to complete before starting the next iteration
+            tts_duration = result.get("tts_duration", 0)
+            if tts_duration > 0:
+                _LOGGER.debug(f"Waiting for TTS to complete: {tts_duration} seconds")
+                await asyncio.sleep(tts_duration)
 
-            except Exception as e:
-                _LOGGER.exception(f"run_assist error: {e}")
-                await asyncio.sleep(1)
+        except Exception as e:
+            _LOGGER.exception(f"run_assist error: {e}")
+            await asyncio.sleep(1)
 
     _LOGGER.debug("Creating coroutines")
     run_stream_task = hass.loop.create_task(run_stream(), name="stream_assist_cc_run_stream")
