@@ -14,7 +14,8 @@ Future goals:
 * Wake Word skip: Add some way to skip the wake word phase on follow up interactions
    * Could be implemented with a function call or just enabled for all interactions with a toggle in config
    * Must also skip intent with closing phrases like Thank You, Nevermind, That is all, Stop, etc. so the LLM doesn't get prompted needlessly
-   * *Current roadblock is finding a way to make the integration aware of exactly when TTS playback has ended for the most recent interaction. Without this, the STT phase would initiate before TTS playback ends, so the user would not have the opportunity to make a request in time.*
+   * Successfully implemented a way to make the TTS sensor accurately reflect the TTS playback state
+   * *Current roadblock is finding a way to find a way to skip the next wake phase after tts-end.*
 * Globally continued conversations: Add the option to pass conversation IDs across all integration entries
    * This would require the integration to also provide updated area and device information
 * Expose more of the integration to automations
