@@ -202,7 +202,8 @@ async def assist_run(
             if player_entity_id:
                 tts = event.data["tts_output"]
                 tts_url = tts["url"]
-                tts_duration = asyncio.run(calculate_tts_duration(hass, tts_url))
+                # Schedule an async task to calculate the TTS duration
+                hass.loop.create_task(calculate_tts_duration(hass, tts_url))
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
 
         if event_callback:
