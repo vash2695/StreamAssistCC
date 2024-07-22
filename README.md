@@ -9,6 +9,8 @@ Features added so far:
 * STT End media: Now both the start and end of the STT phase have options for audio feedback. Also added a field for this in the config options
 * Audio feedback for "no-text-recognized" events
 * More initial config options: All available options are now in the initial config screen
+* Added cancel phrases like: "nevermind", "never mind", "thank you", "cancel that", "cancel",
+    "abort", "quit", "exit", "end", "forget it", "that's all", "that is all"
 
 Future goals:
 * Wake Word skip: Add some way to skip the wake word phase on follow up interactions
@@ -20,5 +22,3 @@ Future goals:
    * This would require the integration to also provide updated area and device information
 * Expose more of the integration to automations
   * Example: A service call that allows you to select an integration entry and trigger the assistant pipeline at the intent phase with predefined data
-* Add cancel phrases like: "stop", "nevermind", "never mind", "thank you", "cancel that", "cancel",
-    "abort", "quit", "exit", "end", "forget it", "that's all", "that is all"
