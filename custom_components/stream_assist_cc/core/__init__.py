@@ -201,6 +201,10 @@ async def assist_run(
                     duration = await get_tts_duration(hass, tts_url)
                     events[PipelineEventType.TTS_END]["data"]["tts_duration"] = duration
                     _LOGGER.debug(f"Stored TTS duration: {duration} seconds")
+                    
+                    # Set a timer to simulate wake word detection after TTS playback
+                    await asyncio.sleep(duration)
+                    simulate_wake_word_detection()
 
                 # Schedule an async task to calculate and store the TTS duration
                 hass.create_task(calculate_and_store_duration())
