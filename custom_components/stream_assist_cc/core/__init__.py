@@ -196,6 +196,15 @@ async def assist_run(
             if player_entity_id:
                 tts = event.data["tts_output"]
                 tts_url = tts["url"]
+
+                async def simulate_wake_word_detection():
+                    # Simulate a wake word detection event
+                    wake_word_event = PipelineEvent(
+                        PipelineEventType.WAKE_WORD_END,
+                        {"wake_word_output": {"wake_word_id": "SIMULATED", "timestamp": time.time()}}
+                    )
+                    pipeline_run.process_event(wake_word_event)
+                    _LOGGER.debug("Simulated wake word detection after TTS playback")
                 
                 async def calculate_and_store_duration():
                     duration = await get_tts_duration(hass, tts_url)
@@ -204,7 +213,7 @@ async def assist_run(
                     
                     # Set a timer to simulate wake word detection after TTS playback
                     await asyncio.sleep(duration)
-                    simulate_wake_word_detection()
+                    await simulate_wake_word_detection()
 
                 # Schedule an async task to calculate and store the TTS duration
                 hass.create_task(calculate_and_store_duration())
