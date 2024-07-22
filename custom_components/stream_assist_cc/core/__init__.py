@@ -116,12 +116,7 @@ async def get_tts_duration(hass: HomeAssistant, tts_url: str) -> float:
     except Exception as e:
         _LOGGER.error(f"Error getting TTS duration: {e}")
         return 0
-
-
-# async def calculate_tts_duration(hass: HomeAssistant, tts_url: str):
-   # tts_duration = await get_tts_duration(hass, tts_url)
-   # return tts_duration
-
+        
 
 async def assist_run(
     hass: HomeAssistant,
