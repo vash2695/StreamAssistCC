@@ -206,30 +206,20 @@ async def assist_run(
                     await asyncio.sleep(1)  # Additional small delay
 
                     _LOGGER.debug("Simulating wake word detection after TTS playback")
+            
+                    # Trigger a new assist_run, starting from STT stage
+                    new_assist = data.copy()
+                    new_assist['assist'] = new_assist.get('assist', {})
+                    new_assist['assist']['start_stage'] = PipelineStage.STT
                     
-                    # Get the proper wake word for this pipeline
-                    wake_word_id = pipeline_run.pipeline.wake_word_id
-                    wake_word_entity = pipeline_run.pipeline.wake_word_entity
-    
-                    # If wake_word_id is not set, try to get it from the entity
-                    if not wake_word_id and wake_word_entity:
-                        wake_word_entity_state = hass.states.get(wake_word_entity)
-                        if wake_word_entity_state:
-                            wake_word_id = wake_word_entity_state.attributes.get("wake_word_id")
-    
-                    # Default to "default" if we couldn't find a wake word ID
-                    wake_word_id = wake_word_id or "default"
-                    
-                    # Simulate wake word detection end event
-                    wake_word_event = PipelineEvent(
-                        PipelineEventType.WAKE_WORD_END,
-                        {"wake_word_output": {
-                            "wake_word_id": wake_word_id,
-                            "wake_word_phrase": wake_word_id,  # Using ID as phrase; adjust if needed
-                            "timestamp": time.time()
-                        }}
-                    )
-                    pipeline_run.process_event(wake_word_event)
+                    hass.create_task(assist_run(
+                        hass,
+                        new_assist,
+                        context=context,
+                        event_callback=event_callback,
+                        stt_stream=stt_stream,
+                        conversation_id=conversation_id
+                    ))
 
                 # Schedule an async task to simulate wake word and continue pipeline
                 hass.create_task(simulate_wake_word_and_continue())
