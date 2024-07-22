@@ -217,6 +217,12 @@ async def assist_run(
                             pipeline_input.stt_metadata,
                             stt_input_stream,
                         )
+                        
+                        # Proceed with intent recognition if needed
+                        if pipeline_run.end_stage >= PipelineStage.INTENT:
+                            await pipeline_run.recognize_intent(stt_result, pipeline_input.conversation_id, pipeline_input.device_id)
+                    except Exception as e:
+                        _LOGGER.error(f"Error during STT or intent recognition: {e}")
                 
                 async def calculate_and_store_duration():
                     duration = await get_tts_duration(hass, tts_url)
