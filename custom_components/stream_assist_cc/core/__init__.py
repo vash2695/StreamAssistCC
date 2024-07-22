@@ -205,6 +205,18 @@ async def assist_run(
                     )
                     pipeline_run.process_event(wake_word_event)
                     _LOGGER.debug("Simulated wake word detection after TTS playback")
+
+                    # Prepare STT if not already prepared
+                    if not hasattr(pipeline_run, 'stt_provider'):
+                        await pipeline_run.prepare_speech_to_text(pipeline_input.stt_metadata)
+                    
+                    # Start STT stage
+                    try:
+                        stt_input_stream = pipeline_input.stt_stream
+                        stt_result = await pipeline_run.speech_to_text(
+                            pipeline_input.stt_metadata,
+                            stt_input_stream,
+                        )
                 
                 async def calculate_and_store_duration():
                     duration = await get_tts_duration(hass, tts_url)
