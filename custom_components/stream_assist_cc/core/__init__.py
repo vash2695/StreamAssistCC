@@ -198,9 +198,9 @@ async def assist_run(
                 tts_url = tts["url"]
                 
                 async def calculate_and_store_duration():
-                duration = await get_tts_duration(hass, tts_url)
-                events[PipelineEventType.TTS_END]["data"]["tts_duration"] = duration
-                _LOGGER.debug(f"Stored TTS duration: {duration} seconds")
+                    duration = await get_tts_duration(hass, tts_url)
+                    events[PipelineEventType.TTS_END]["data"]["tts_duration"] = duration
+                    _LOGGER.debug(f"Stored TTS duration: {duration} seconds")
 
                 # Schedule an async task to calculate and store the TTS duration
                 hass.create_task(calculate_and_store_duration())
