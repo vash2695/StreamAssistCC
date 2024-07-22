@@ -120,7 +120,6 @@ async def get_tts_duration(hass: HomeAssistant, tts_url: str) -> float:
 
 async def calculate_tts_duration(hass: HomeAssistant, tts_url: str):
     tts_duration = await get_tts_duration(hass, tts_url)
-    _LOGGER.debug(f"Calculated TTS duration: {tts_duration} seconds")
     return tts_duration
 
 
