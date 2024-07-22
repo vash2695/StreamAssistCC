@@ -111,7 +111,7 @@ async def get_tts_duration(hass: HomeAssistant, tts_url: str) -> float:
         duration = audio.info.length
         
         _LOGGER.debug(f"TTS audio duration: {duration} seconds")
-        return tts_duration
+        return duration
 
     except Exception as e:
         _LOGGER.error(f"Error getting TTS duration: {e}")
@@ -196,8 +196,14 @@ async def assist_run(
             if player_entity_id:
                 tts = event.data["tts_output"]
                 tts_url = tts["url"]
-                # Schedule an async task to calculate the TTS duration
-                hass.loop.create_task(get_tts_duration(hass, tts_url))
+                
+                async def calculate_and_store_duration():
+                duration = await get_tts_duration(hass, tts_url)
+                events[PipelineEventType.TTS_END]["data"]["tts_duration"] = duration
+                _LOGGER.debug(f"Stored TTS duration: {duration} seconds")
+
+                # Schedule an async task to calculate and store the TTS duration
+                hass.create_task(calculate_and_store_duration())
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
 
         if event_callback:
