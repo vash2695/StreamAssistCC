@@ -215,7 +215,7 @@ async def assist_run(
                     pipeline_run.process_event(wake_word_event)
 
                     # Trigger the continuation of the pipeline
-                    await pipeline_input.execute()
+                    await stt_stream.start()
 
                 # Schedule an async task to simulate wake word and continue pipeline
                 hass.create_task(simulate_wake_word_and_continue())
