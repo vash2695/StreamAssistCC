@@ -111,16 +111,16 @@ async def get_tts_duration(hass: HomeAssistant, tts_url: str) -> float:
         duration = audio.info.length
         
         _LOGGER.debug(f"TTS audio duration: {duration} seconds")
-        return duration
+        return tts_duration
 
     except Exception as e:
         _LOGGER.error(f"Error getting TTS duration: {e}")
         return 0
 
 
-async def calculate_tts_duration(hass: HomeAssistant, tts_url: str):
-    tts_duration = await get_tts_duration(hass, tts_url)
-    return tts_duration
+# async def calculate_tts_duration(hass: HomeAssistant, tts_url: str):
+   # tts_duration = await get_tts_duration(hass, tts_url)
+   # return tts_duration
 
 
 async def assist_run(
@@ -170,7 +170,7 @@ async def assist_run(
     tts_duration = 0
 
     def internal_event_callback(event: PipelineEvent):
-        nonlocal pipeline_run, tts_duration
+        nonlocal pipeline_run
         _LOGGER.debug(f"Event: {event.type}, Data: {event.data}")
 
         events[event.type] = (
@@ -202,7 +202,7 @@ async def assist_run(
                 tts = event.data["tts_output"]
                 tts_url = tts["url"]
                 # Schedule an async task to calculate the TTS duration
-                hass.loop.create_task(calculate_tts_duration(hass, tts_url))
+                hass.loop.create_task(get_tts_duration(hass, tts_url))
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
 
         if event_callback:
@@ -254,8 +254,6 @@ async def assist_run(
         if PipelineEventType.INTENT_END in events:
             intent_output = events[PipelineEventType.INTENT_END].get('data', {}).get('intent_output', {})
             result_conversation_id = intent_output.get('conversation_id')
-            
-        _LOGGER.debug(f"Pipeline execution completed. TTS duration: {tts_duration}")
 
         return {
             "events": events, 
