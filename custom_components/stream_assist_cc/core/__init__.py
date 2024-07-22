@@ -197,44 +197,28 @@ async def assist_run(
                 tts = event.data["tts_output"]
                 tts_url = tts["url"]
 
-                async def simulate_wake_word_detection():
-                    # Simulate a wake word detection event
-                    wake_word_event = PipelineEvent(
-                        PipelineEventType.WAKE_WORD_END,
-                        {"wake_word_output": {"wake_word_id": "SIMULATED", "timestamp": time.time()}}
-                    )
-                    pipeline_run.process_event(wake_word_event)
-                    _LOGGER.debug("Simulated wake word detection after TTS playback")
-
-                    # Prepare STT if not already prepared
-                    if not hasattr(pipeline_run, 'stt_provider'):
-                        await pipeline_run.prepare_speech_to_text(pipeline_input.stt_metadata)
-                    
-                    # Start STT stage
-                    try:
-                        stt_input_stream = pipeline_input.stt_stream
-                        stt_result = await pipeline_run.speech_to_text(
-                            pipeline_input.stt_metadata,
-                            stt_input_stream,
-                        )
-                        
-                        # Proceed with intent recognition if needed
-                        if pipeline_run.end_stage >= PipelineStage.INTENT:
-                            await pipeline_run.recognize_intent(stt_result, pipeline_input.conversation_id, pipeline_input.device_id)
-                    except Exception as e:
-                        _LOGGER.error(f"Error during STT or intent recognition: {e}")
-                
-                async def calculate_and_store_duration():
+                async def simulate_wake_word_and_continue():
                     duration = await get_tts_duration(hass, tts_url)
                     events[PipelineEventType.TTS_END]["data"]["tts_duration"] = duration
                     _LOGGER.debug(f"Stored TTS duration: {duration} seconds")
                     
                     # Set a timer to simulate wake word detection after TTS playback
                     await asyncio.sleep(duration)
-                    await simulate_wake_word_detection()
+                    await asyncio.sleep(1)  # Additional small delay
 
-                # Schedule an async task to calculate and store the TTS duration
-                hass.create_task(calculate_and_store_duration())
+                    _LOGGER.debug("Simulating wake word detection after TTS playback")
+                    # Simulate a wake word detection event
+                    wake_word_event = PipelineEvent(
+                        PipelineEventType.WAKE_WORD_END,
+                        {"wake_word_output": {"wake_word_id": "SIMULATED", "timestamp": time.time()}}
+                    )
+                    pipeline_run.process_event(wake_word_event)
+
+                    # Trigger the continuation of the pipeline
+                    await pipeline_input.execute()
+
+                # Schedule an async task to simulate wake word and continue pipeline
+                hass.create_task(simulate_wake_word_and_continue())
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
 
         if event_callback:
