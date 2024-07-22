@@ -214,8 +214,22 @@ async def assist_run(
                     )
                     pipeline_run.process_event(wake_word_event)
 
-                    # Trigger the continuation of the pipeline
-                    stt_stream.start()
+                    # Simulate STT start event
+                    stt_start_event = PipelineEvent(
+                        PipelineEventType.STT_START,
+                        {
+                            "engine": pipeline_run.pipeline.stt_engine,
+                            "metadata": {
+                                "language": pipeline_run.pipeline.stt_language or pipeline_run.language,
+                                "format": stt.AudioFormats.WAV,
+                                "codec": stt.AudioCodecs.PCM,
+                                "bit_rate": stt.AudioBitRates.BITRATE_16,
+                                "sample_rate": stt.AudioSampleRates.SAMPLERATE_16000,
+                                "channel": stt.AudioChannels.CHANNEL_MONO,
+                            }
+                        }
+                    )
+                    pipeline_run.process_event(stt_start_event)
 
                 # Schedule an async task to simulate wake word and continue pipeline
                 hass.create_task(simulate_wake_word_and_continue())
