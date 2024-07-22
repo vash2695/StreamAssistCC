@@ -110,7 +110,6 @@ async def get_tts_duration(hass: HomeAssistant, tts_url: str) -> float:
         audio = MP3(io.BytesIO(content))
         duration = audio.info.length
         
-        _LOGGER.debug(f"TTS audio duration: {duration} seconds")
         return duration
 
     except Exception as e:
@@ -231,8 +230,6 @@ async def assist_run(
                         }}
                     )
                     pipeline_run.process_event(wake_word_event)
-    
-                    _LOGGER.debug(f"Simulated wake word event with ID: {wake_word_id}")
 
                 # Schedule an async task to simulate wake word and continue pipeline
                 hass.create_task(simulate_wake_word_and_continue())
