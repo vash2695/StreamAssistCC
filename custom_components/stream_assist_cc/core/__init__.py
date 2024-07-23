@@ -232,7 +232,11 @@ async def assist_run(
                     pipeline_run.process_event(wake_word_event)
                 
                     # Ensure the pipeline continues from the appropriate stage
-                    await pipeline_run.start()
+                    device_id = data.get("device_id")
+                    if not device_id:
+                        device_id = hass.data["device_registry"].async_get_device_id(hass, pipeline_run.pipeline.wake_word_entity)
+                
+                    await pipeline_run.start(device_id=device_id)
 
                 # Schedule an async task to simulate wake word and continue pipeline
                 hass.create_task(simulate_wake_word_and_continue())
