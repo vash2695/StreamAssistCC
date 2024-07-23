@@ -234,7 +234,12 @@ async def assist_run(
                     # Ensure the pipeline continues from the appropriate stage
                     device_id = data.get("device_id")
                     if not device_id:
-                        device_id = hass.data["device_registry"].async_get_device_id(hass, pipeline_run.pipeline.wake_word_entity)
+                        device_entry = hass.helpers.device_registry.async_get_device(identifiers={(DOMAIN, pipeline_run.pipeline.wake_word_entity)})
+                        if device_entry:
+                            device_id = device_entry.id
+                        else:
+                            _LOGGER.error("Failed to retrieve device_id")
+                            return
                 
                     await pipeline_run.start(device_id=device_id)
 
