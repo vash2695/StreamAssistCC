@@ -248,7 +248,7 @@ async def assist_run(
                     pipeline_run.process_event(wake_word_event)
 
                 # Schedule an async task to simulate wake word and continue pipeline
-                hass.create_task(simulate_wake_word_and_continue())
+                # hass.create_task(simulate_wake_word_and_continue())
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
 
         if event_callback:
