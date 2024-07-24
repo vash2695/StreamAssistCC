@@ -1,11 +1,11 @@
 import asyncio
-import aiohttp
-import aiofiles
-import os
-import io
-import tempfile
+# import aiohttp
+# import aiofiles
+# import os
+from io import BytesIO
+# import tempfile
 import logging
-import inspect
+# import inspect
 import time
 import re
 from typing import Callable
@@ -13,7 +13,7 @@ from mutagen.mp3 import MP3
 
 from homeassistant.components import assist_pipeline
 from homeassistant.components import media_player
-from homeassistant.components import stt
+from homeassistant.components.stt import SpeechMetadata
 from homeassistant.components.assist_pipeline import (
     AudioSettings,
     Pipeline,
@@ -25,12 +25,12 @@ from homeassistant.components.assist_pipeline import (
     PipelineRun,
     WakeWordSettings,
 )
-from homeassistant.components.camera import Camera
+from homeassistant.components.camera import Camera  # Kept for type hinting
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, Context
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import Entity, DeviceInfo
-from homeassistant.helpers.entity_component import EntityComponent
+from homeassistant.helpers.entity_component import EntityComponent  # Kept for type hinting
 from homeassistant.helpers.network import get_url
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
