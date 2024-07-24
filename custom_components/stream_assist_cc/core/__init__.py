@@ -1,11 +1,6 @@
 import asyncio
-# import aiohttp
-# import aiofiles
-# import os
 import io
-# import tempfile
 import logging
-# import inspect
 import time
 import re
 from typing import Callable
