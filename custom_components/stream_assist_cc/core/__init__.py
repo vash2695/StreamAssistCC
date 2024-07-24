@@ -40,11 +40,20 @@ _LOGGER = logging.getLogger(__name__)
 
 DOMAIN = "stream_assist_cc"
 EVENTS = ["wake", "stt", "intent", "tts"]
+
 CANCELLATION_PHRASES = [
     r'\bnevermind\b', r'\bnever mind\b', r'\bthank you\b', r'\bcancel that\b', 
     r'\bcancel\b', r'\babort\b', r'\bquit\b', r'\bexit\b', r'\bend\b', r'\bforget it\b', 
     r'\bthat\'s all\b', r'\bthat is all\b'
 ]
+
+
+def new(cls, kwargs: dict):
+    if not kwargs:
+        return cls()
+    kwargs = {k: v for k, v in kwargs.items() if hasattr(cls, k)}
+    return cls(**kwargs)
+
 
 def init_entity(entity: Entity, key: str, config_entry: ConfigEntry) -> str:
     unique_id = config_entry.entry_id[:7]
@@ -72,20 +81,16 @@ async def get_stream_source(hass: HomeAssistant, entity: str) -> str | None:
         return None
 
 
-async def stream_run(hass: HomeAssistant, data: dict, stt_stream: Stream) -> None:
-    stream_kwargs = data.get("stream", {})
+def play_media(hass: HomeAssistant, entity_id: str, media_id: str, media_type: str):
+    service_data = {
+        "entity_id": entity_id,
+        "media_content_id": media_player.async_process_play_media_url(hass, media_id),
+        "media_content_type": media_type,
+    }
 
-    if "file" not in stream_kwargs:
-        if url := data.get("stream_source"):
-            stream_kwargs["file"] = url
-        elif entity := data.get("camera_entity_id"):
-            stream_kwargs["file"] = await get_stream_source(hass, entity)
-        else:
-            return
-
-    stt_stream.open(**stream_kwargs)
-
-    await hass.async_add_executor_job(stt_stream.run)
+    # hass.services.call will block Hass
+    coro = hass.services.async_call("media_player", "play_media", service_data)
+    hass.async_create_background_task(coro, "stream_assist_cc_play_media")
 
 
 async def get_tts_duration(hass: HomeAssistant, tts_url: str) -> float:
@@ -115,7 +120,23 @@ async def get_tts_duration(hass: HomeAssistant, tts_url: str) -> float:
     except Exception as e:
         _LOGGER.error(f"Error getting TTS duration: {e}")
         return 0
-        
+
+
+async def stream_run(hass: HomeAssistant, data: dict, stt_stream: Stream) -> None:
+    stream_kwargs = data.get("stream", {})
+
+    if "file" not in stream_kwargs:
+        if url := data.get("stream_source"):
+            stream_kwargs["file"] = url
+        elif entity := data.get("camera_entity_id"):
+            stream_kwargs["file"] = await get_stream_source(hass, entity)
+        else:
+            return
+
+    stt_stream.open(**stream_kwargs)
+
+    await hass.async_add_executor_job(stt_stream.run)
+
 
 async def assist_run(
     hass: HomeAssistant,
@@ -299,18 +320,7 @@ async def assist_run(
 
     # If we reach here due to an exception, return a default dictionary
     return {"events": events, "conversation_id": None, "tts_duration": 0}
-
-
-def play_media(hass: HomeAssistant, entity_id: str, media_id: str, media_type: str):
-    service_data = {
-        "entity_id": entity_id,
-        "media_content_id": media_player.async_process_play_media_url(hass, media_id),
-        "media_content_type": media_type,
-    }
-
-    # hass.services.call will block Hass
-    coro = hass.services.async_call("media_player", "play_media", service_data)
-    hass.async_create_background_task(coro, "stream_assist_cc_play_media")
+    
 
 def run_forever(
     hass: HomeAssistant,
@@ -363,9 +373,3 @@ def run_forever(
     hass.loop.create_task(run_assist_coro, name="stream_assist_cc_run_assist")
 
     return stt_stream.close
-
-def new(cls, kwargs: dict):
-    if not kwargs:
-        return cls()
-    kwargs = {k: v for k, v in kwargs.items() if hasattr(cls, k)}
-    return cls(**kwargs)
