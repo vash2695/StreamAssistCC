@@ -282,7 +282,7 @@ async def assist_run(
         intent_input=assist.get("intent_input"),
         tts_input=assist.get("tts_input"),
         conversation_id=conversation_id,  # Pass the conversation_id
-        device_id=data.get("device_id"),  # Pass the device_id if available
+        device_id=assist.get("device_id"),
     )
 
     try:
