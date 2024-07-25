@@ -2,7 +2,8 @@
   "domain": "stream_assist_cc",
   "name": "Stream Assist CC",
   "codeowners": [
-    "@AlexxIT"
+    "@AlexxIT",
+    "@vash2695"
   ],
   "config_flow": true,
   "dependencies": [
