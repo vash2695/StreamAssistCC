@@ -236,7 +236,7 @@ async def assist_run(
                     # Default to "default" if we couldn't find a wake word ID
                     wake_word_id = wake_word_id or "default"
                     
-                    # Simulate wake word detection end event
+                    # Create and dispatch the wake word end event
                     wake_word_event = PipelineEvent(
                         PipelineEventType.WAKE_WORD_END,
                         {"wake_word_output": {
@@ -245,10 +245,15 @@ async def assist_run(
                             "timestamp": time.time()
                         }}
                     )
-                    pipeline_run.process_event(wake_word_event)
+                
+                    # Dispatch the event to the existing event handler
+                    hass.bus.async_fire("pipeline_event", {
+                        "pipeline_id": pipeline_run.pipeline.id,
+                        "event": wake_word_event
+                    })
 
                 # Schedule an async task to simulate wake word and continue pipeline
-                # hass.create_task(simulate_wake_word_and_continue())
+                hass.create_task(simulate_wake_word_and_continue())
                 play_media(hass, player_entity_id, tts["url"], tts["mime_type"])
 
         if event_callback:
