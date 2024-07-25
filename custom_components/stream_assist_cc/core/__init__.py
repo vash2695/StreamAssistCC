@@ -246,7 +246,7 @@ async def assist_run(
                             "timestamp": time.time()
                         }}
                     )
-                    _LOGGER.debug("Wake Word Event:"wake_word_event)
+                    _LOGGER.debug("Wake Word Event:",wake_word_event)
                     pipeline_run.process_event(wake_word_event)
 
                 # Schedule an async task to simulate wake word and continue pipeline
