@@ -236,7 +236,7 @@ async def assist_run(
                     # Default to "default" if we couldn't find a wake word ID
                     wake_word_id = wake_word_id or "default"
                     
-                    _LOGGER.debug(wake_word_id)
+                    _LOGGER.debug("Wake Word ID:"wake_word_id,"Wake Word Entity:"wake_word_entity,"Wake Word Entity State:"wake_word_entity_state)
                     # Simulate wake word detection end event
                     wake_word_event = PipelineEvent(
                         PipelineEventType.WAKE_WORD_END,
@@ -246,6 +246,7 @@ async def assist_run(
                             "timestamp": time.time()
                         }}
                     )
+                    _LOGGER.debug("Wake Word Event:"wake_word_event)
                     pipeline_run.process_event(wake_word_event)
 
                 # Schedule an async task to simulate wake word and continue pipeline
