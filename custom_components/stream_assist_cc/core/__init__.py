@@ -236,7 +236,7 @@ async def assist_run(
                     # Default to "default" if we couldn't find a wake word ID
                     wake_word_id = wake_word_id or "default"
                     
-                    # Create and dispatch the wake word end event
+                    # Simulate wake word detection end event
                     wake_word_event = PipelineEvent(
                         PipelineEventType.WAKE_WORD_END,
                         {"wake_word_output": {
@@ -245,12 +245,7 @@ async def assist_run(
                             "timestamp": time.time()
                         }}
                     )
-                
-                    # Dispatch the event to the existing event handler
-                    hass.bus.async_fire("pipeline_event", {
-                        "pipeline_id": pipeline_run.pipeline.id,
-                        "event": wake_word_event
-                    })
+                    pipeline_run.process_event(wake_word_event)
 
                 # Schedule an async task to simulate wake word and continue pipeline
                 hass.create_task(simulate_wake_word_and_continue())
