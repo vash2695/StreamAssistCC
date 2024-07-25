@@ -231,24 +231,21 @@ async def assist_run(
                     # If wake_word_id is not set, try to get it from the entity
                     if not wake_word_id and wake_word_entity:
                         wake_word_entity_state = hass.states.get(wake_word_entity)
-                        _LOGGER.debug(f"Wake Word Entity State: {wake_word_entity_state}")
                         if wake_word_entity_state:
                             wake_word_id = wake_word_entity_state.attributes.get("wake_word_id")
                 
                     # Default to "default" if we couldn't find a wake word ID
                     wake_word_id = wake_word_id or "default"
                     
-                    _LOGGER.debug(f"Wake Word ID: {wake_word_id} Wake Word Entity: {wake_word_entity}")
                     # Simulate wake word detection end event
                     wake_word_event = PipelineEvent(
                         PipelineEventType.WAKE_WORD_END,
                         {"wake_word_output": {
                             "wake_word_id": wake_word_id,
                             "wake_word_phrase": wake_word_phrase,
-                            "timestamp": event.timestamp
+                            "timestamp": time.time()
                         }}
                     )
-                    _LOGGER.debug(f"Wake Word Event: {wake_word_event}")
                     pipeline_run.process_event(wake_word_event)
 
                 # Schedule an async task to simulate wake word and continue pipeline
