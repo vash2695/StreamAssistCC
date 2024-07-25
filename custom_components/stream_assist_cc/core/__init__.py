@@ -225,7 +225,7 @@ async def assist_run(
                 
                     # Get the proper wake word for this pipeline
                     wake_word_id = pipeline_run.pipeline.wake_word_id
-                    wake_word_phrase = pipeline_run.pipeline.wake_word_phrase
+                    wake_word_phrase = re.sub(r'_', ' ',wake_word_id)
                     wake_word_entity = pipeline_run.pipeline.wake_word_entity
                 
                     # If wake_word_id is not set, try to get it from the entity
@@ -245,7 +245,7 @@ async def assist_run(
                         {"wake_word_output": {
                             "wake_word_id": wake_word_id,
                             "wake_word_phrase": wake_word_phrase,
-                            "timestamp": time.time()
+                            "timestamp": event.timestamp
                         }}
                     )
                     _LOGGER.debug(f"Wake Word Event: {wake_word_event}")
